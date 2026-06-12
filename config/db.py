@@ -9,7 +9,7 @@ import psycopg2
 from config.config_db import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
 
 def get_connection():
-        """
+    """
     Crée et retourne une connexion PostgreSQL.
 
     Les paramètres de connexion sont récupérés depuis les
