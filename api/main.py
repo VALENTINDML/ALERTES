@@ -7,6 +7,7 @@ utilisateurs, prédictions, notifications et dernières données de marché.
 """
 from fastapi import FastAPI
 from config.db import get_connection
+from prometheus_fastapi_instrumentator import Instrumentator
 
 
 app = FastAPI(
@@ -15,6 +16,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
+Instrumentator().instrument(app).expose(app)
 
 def fetch_one(query, params=None):
     """
@@ -235,3 +237,218 @@ def daily_alerts_count():
         }
         for row in rows
     ]
+
+
+@app.get("/notifications/by-type")
+def notifications_by_type():
+    """
+    Retourne le nombre de notifications par type et par statut.
+
+    Permet de distinguer :
+    - daily_prediction : notifications issues des prédictions ML ;
+    - price_target : notifications issues des alertes prix temps réel.
+    """
+    rows = fetch_all("""
+        SELECT
+            notification_type,
+            status,
+            COUNT(*)
+        FROM notifications
+        GROUP BY notification_type, status
+        ORDER BY notification_type, status;
+    """)
+
+    return [
+        {
+            "notification_type": row[0],
+            "status": row[1],
+            "count": row[2],
+        }
+        for row in rows
+    ]
+
+
+@app.get("/notifications/price-target/latest")
+def latest_price_target_notifications(limit: int = 20):
+    """
+    Retourne les dernières notifications issues des alertes de prix.
+
+    Ces notifications proviennent du service de streaming Binance
+    et ont notification_type = 'price_target'.
+    """
+    rows = fetch_all("""
+        SELECT
+            n.id,
+            n.user_id,
+            u.email,
+            n.symbol,
+            n.message,
+            n.status,
+            n.created_at
+        FROM notifications n
+        JOIN users u
+            ON n.user_id = u.id
+        WHERE n.notification_type = 'price_target'
+        ORDER BY n.created_at DESC
+        LIMIT %s;
+    """, (limit,))
+
+    return [
+        {
+            "id": row[0],
+            "user_id": row[1],
+            "email": row[2],
+            "symbol": row[3],
+            "message": row[4],
+            "status": row[5],
+            "created_at": row[6],
+        }
+        for row in rows
+    ]
+
+
+@app.get("/notifications/daily-prediction/latest")
+def latest_daily_prediction_notifications(limit: int = 20):
+    """
+    Retourne les dernières notifications issues des prédictions ML.
+
+    Ces notifications ont notification_type = 'daily_prediction'.
+    """
+    rows = fetch_all("""
+        SELECT
+            n.id,
+            n.user_id,
+            u.email,
+            n.prediction_id,
+            n.symbol,
+            n.message,
+            n.status,
+            n.created_at
+        FROM notifications n
+        JOIN users u
+            ON n.user_id = u.id
+        WHERE n.notification_type = 'daily_prediction'
+        ORDER BY n.created_at DESC
+        LIMIT %s;
+    """, (limit,))
+
+    return [
+        {
+            "id": row[0],
+            "user_id": row[1],
+            "email": row[2],
+            "prediction_id": row[3],
+            "symbol": row[4],
+            "message": row[5],
+            "status": row[6],
+            "created_at": row[7],
+        }
+        for row in rows
+    ]
+
+
+@app.get("/price-alerts/latest")
+def latest_price_alerts(limit: int = 20):
+    """
+    Retourne les dernières alertes de prix configurées par les utilisateurs.
+
+    Cette table représente les seuils surveillés par le service streaming.
+    """
+    rows = fetch_all("""
+        SELECT
+            pa.id,
+            pa.user_id,
+            u.email,
+            pa.symbol,
+            pa.target_price,
+            pa.direction,
+            pa.is_active,
+            pa.triggered_at,
+            pa.created_at
+        FROM price_alerts pa
+        JOIN users u
+            ON pa.user_id = u.id
+        ORDER BY pa.created_at DESC
+        LIMIT %s;
+    """, (limit,))
+
+    return [
+        {
+            "id": row[0],
+            "user_id": row[1],
+            "email": row[2],
+            "symbol": row[3],
+            "target_price": row[4],
+            "direction": row[5],
+            "is_active": row[6],
+            "triggered_at": row[7],
+            "created_at": row[8],
+        }
+        for row in rows
+    ]
+
+
+@app.get("/price-alerts/count")
+def price_alerts_count():
+    """
+    Retourne la répartition des alertes de prix actives et déclenchées.
+    """
+    rows = fetch_all("""
+        SELECT
+            is_active,
+            COUNT(*)
+        FROM price_alerts
+        GROUP BY is_active
+        ORDER BY is_active DESC;
+    """)
+
+    return [
+        {
+            "is_active": row[0],
+            "count": row[1],
+        }
+        for row in rows
+    ]
+
+@app.get("/market/live")
+def live_market_data(symbol: str = "BTC/USDT"):
+    """
+    Retourne la dernière bougie live reçue depuis le WebSocket Binance.
+    """
+    row = fetch_one("""
+        SELECT
+            symbol,
+            timestamp,
+            datetime,
+            timeframe,
+            open,
+            high,
+            low,
+            close,
+            volume,
+            is_closed,
+            updated_at
+        FROM live_market_data
+        WHERE symbol = %s
+        ORDER BY updated_at DESC
+        LIMIT 1;
+    """, (symbol,))
+
+    if row is None:
+        return {
+            "error": f"Aucune donnée live disponible pour {symbol}"
+        }
+
+    return {
+        "symbol": row[0],
+        "timestamp": row[1],
+        "datetime": row[2],
+        "timeframe": row[3],
+        "open": row[4],
+        "high": row[5],
+        "low": row[6],
+        "close": row[7],
+        "volume": row[8],
+        "is_closed": row[9],
+        "updated_at": row[10],
+    }
