@@ -9,3 +9,6 @@ uvicorn
 streamlit 
 requests
 pytest
+prometheus-fastapi-instrumentator
+streamlit-autorefresh
+websocket
