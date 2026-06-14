@@ -56,6 +56,33 @@ def init_users_db():
         );
     """)
 
+    # Création de la table predictions 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS predictions (
+            id SERIAL PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            prediction_datetime TIMESTAMP NOT NULL,
+            predicted_change_24h DOUBLE PRECISION NOT NULL,
+            trend TEXT NOT NULL,
+            model_path TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(symbol, prediction_datetime)
+        );
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS price_alerts (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            symbol TEXT NOT NULL,
+            target_price DOUBLE PRECISION NOT NULL,
+            direction TEXT NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            triggered_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
     # Historique des notifications générées.
     # Le statut permettra plus tard de gérer l'envoi réel.
     cur.execute("""
@@ -86,6 +113,11 @@ def init_users_db():
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_daily_alert_preferences_user_symbol
         ON daily_alert_preferences(user_id, symbol);
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_price_alerts_symbol_active
+        ON price_alerts(symbol, is_active);
     """)
 
     cur.execute("""

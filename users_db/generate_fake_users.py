@@ -268,6 +268,76 @@ def generate_alert_preferences(user_ids):
     cur.close()
     conn.close()
 
+def generate_price_alerts(user_ids):
+    """
+    Génère des alertes de prix fictives à partir des positions utilisateurs.
+
+    Le prix cible est calculé à partir du buy_price réel de chaque position,
+    afin de simuler une alerte cohérente avec le prix d'achat utilisateur.
+
+    Args:
+        user_ids (list[int]): Liste des IDs utilisateurs.
+
+    Returns:
+        None
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            user_id,
+            symbol,
+            buy_price
+        FROM user_positions
+        WHERE user_id = ANY(%s)
+          AND is_active = TRUE;
+    """, (user_ids,))
+
+    positions = cur.fetchall()
+
+    price_alerts = []
+
+    for user_id, symbol, buy_price in positions:
+        direction = random.choice(["above", "below"])
+
+        if direction == "above":
+            multiplier = random.uniform(1.03, 1.15)
+        else:
+            multiplier = random.uniform(0.85, 0.97)
+
+        target_price = round(buy_price * multiplier, 2)
+
+        price_alerts.append(
+            (
+                user_id,
+                symbol,
+                target_price,
+                direction,
+                True,
+            )
+        )
+
+    if price_alerts:
+        execute_values(
+            cur,
+            """
+            INSERT INTO price_alerts (
+                user_id,
+                symbol,
+                target_price,
+                direction,
+                is_active
+            )
+            VALUES %s;
+            """,
+            price_alerts,
+        )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
 
 def main():
     """
@@ -287,6 +357,8 @@ def main():
     generate_positions(new_user_ids)
 
     generate_alert_preferences(new_user_ids)
+
+    generate_price_alerts(new_user_ids)
 
     print(f"{total_users} nouveaux utilisateurs générés.")
 
