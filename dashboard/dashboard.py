@@ -16,6 +16,8 @@ import pandas as pd
 import streamlit as st
 import os
 
+from streamlit_autorefresh import st_autorefresh
+
 
 API_URL = os.getenv(
     "API_URL",
@@ -28,6 +30,8 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+
+st_autorefresh(interval=2000, key="live_refresh")
 
 
 def get_api_data(endpoint):
@@ -180,3 +184,32 @@ if latest_notifications:
     st.dataframe(df_notifications, use_container_width=True)
 else:
     st.info("Aucune notification disponible.")
+
+
+# =========================
+# LIVE BINANCE KLINE
+# =========================
+
+st.divider()
+st.subheader("📡 Bougie live BTC/USDT — 1h")
+
+live_market = get_api_data("/market/live?symbol=BTC/USDT")
+
+if live_market and "error" not in live_market:
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric("Open", f"{live_market['open']:.2f}")
+    col2.metric("High", f"{live_market['high']:.2f}")
+    col3.metric("Low", f"{live_market['low']:.2f}")
+    col4.metric("Close live", f"{live_market['close']:.2f}")
+    col5.metric("Volume", f"{live_market['volume']:.2f}")
+
+    st.json({
+        "symbol": live_market["symbol"],
+        "timeframe": live_market["timeframe"],
+        "datetime": live_market["datetime"],
+        "is_closed": live_market["is_closed"],
+        "updated_at": live_market["updated_at"],
+    })
+else:
+    st.info("Aucune donnée live disponible pour le moment.")
