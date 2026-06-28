@@ -1,13 +1,13 @@
-from datetime import datetime
-
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
+from datetime import datetime
+
 
 with DAG(
-    dag_id="setup",
+    dag_id="crypto_training_pipeline",
     start_date=datetime(2025, 1, 1),
-    schedule=None,
+    schedule="@daily", # None , 
     catchup=False,
 ) as dag:
 
@@ -26,9 +26,4 @@ with DAG(
         bash_command="cd /app && PYTHONPATH=/app python ml/train_model.py",
     )
 
-    predict = BashOperator(
-        task_id="predict",
-        bash_command="cd /app && PYTHONPATH=/app python ml/predict.py",
-    )
-
-    collect >> features >> train >> predict
+    collect >> features >> train

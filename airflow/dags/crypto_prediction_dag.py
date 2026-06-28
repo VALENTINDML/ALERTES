@@ -5,9 +5,9 @@ from airflow.operators.bash import BashOperator
 
 
 with DAG(
-    dag_id="setup",
+    dag_id="crypto_prediction",
     start_date=datetime(2025, 1, 1),
-    schedule=None,
+    schedule="@daily",
     catchup=False,
 ) as dag:
 
@@ -21,14 +21,9 @@ with DAG(
         bash_command="cd /app && PYTHONPATH=/app python data/feature_engineering.py",
     )
 
-    train = BashOperator(
-        task_id="train_model",
-        bash_command="cd /app && PYTHONPATH=/app python ml/train_model.py",
-    )
-
     predict = BashOperator(
         task_id="predict",
         bash_command="cd /app && PYTHONPATH=/app python ml/predict.py",
     )
 
-    collect >> features >> train >> predict
+    collect >> features >> predict
