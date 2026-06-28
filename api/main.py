@@ -11,7 +11,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 
 app = FastAPI(
-    title="Crypto Alerts API",
+    title="Alertes API",
     description="API du MVP de prédiction et d'alertes crypto",
     version="1.0.0",
 )
@@ -124,20 +124,6 @@ def latest_predictions():
         for row in rows
     ]
 
-
-@app.get("/notifications/count")
-def notifications_count():
-    """
-    Retourne le nombre total de notifications générées.
-    """
-    row = fetch_one("""
-        SELECT COUNT(*)
-        FROM notifications;
-    """)
-
-    return {
-        "notifications_count": row[0]
-    }
 
 
 @app.get("/notifications/latest")
@@ -388,24 +374,28 @@ def latest_price_alerts(limit: int = 20):
     ]
 
 
-@app.get("/price-alerts/count")
-def price_alerts_count():
-    """
-    Retourne la répartition des alertes de prix actives et déclenchées.
-    """
+@app.get("/metrics/model/latest")
+def latest_model_metrics():
     rows = fetch_all("""
         SELECT
-            is_active,
-            COUNT(*)
-        FROM price_alerts
-        GROUP BY is_active
-        ORDER BY is_active DESC;
+            symbol,
+            mae,
+            rmse,
+            mape,
+            r2,
+            created_at
+        FROM model_metrics
+        ORDER BY created_at DESC;
     """)
 
     return [
         {
-            "is_active": row[0],
-            "count": row[1],
+            "symbol": row[0],
+            "mae": row[1],
+            "rmse": row[2],
+            "mape": row[3],
+            "r2": row[4],
+            "created_at": row[5],
         }
         for row in rows
     ]
@@ -452,3 +442,24 @@ def live_market_data(symbol: str = "BTC/USDT"):
         "is_closed": row[9],
         "updated_at": row[10],
     }
+
+@app.get("/notifications/stats")
+def notifications_stats():
+    """
+    Retourne le nombre d'alertes envoyées quotidiennes et personnalisées 
+    """
+    rows = fetch_all("""
+        SELECT
+            notification_type,
+            COUNT(*)
+        FROM notifications
+        GROUP BY notification_type;
+    """)
+
+    return [
+        {
+            "notification_type": row[0],
+            "count": row[1]
+        }
+        for row in rows
+    ]

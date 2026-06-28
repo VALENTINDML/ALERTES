@@ -3,21 +3,32 @@ services:
     image: postgres:16
     container_name: crypto_postgres
     environment:
-      POSTGRES_DB: crypto_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: crypto_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
   airflow-db:
     image: postgres:16
     container_name: airflow_postgres
     environment:
-      POSTGRES_DB: airflow
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: ${AIRFLOW_POSTGRES_DB}
+      POSTGRES_USER: ${AIRFLOW_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD}
     volumes:
       - airflow_postgres_data:/var/lib/postgresql/data
       
@@ -71,7 +82,7 @@ services:
       - .env.docker
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DATABASE_URL}
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     volumes:
       - .:/app
@@ -81,12 +92,12 @@ services:
       bash -c "
       airflow db migrate &&
       airflow users create
-      --username airflow
-      --password airflow
-      --firstname Air
-      --lastname Flow
-      --role Admin
-      --email airflow@example.com || true
+      --username ${AIRFLOW_ADMIN_USERNAME}
+      --password ${AIRFLOW_ADMIN_PASSWORD}
+      --firstname ${AIRFLOW_ADMIN_FIRSTNAME}
+      --lastname ${AIRFLOW_ADMIN_LASTNAME}
+      --role ${AIRFLOW_ADMIN_ROLE}
+      --email ${AIRFLOW_ADMIN_EMAIL} || true
       "
 
   airflow-webserver:
@@ -101,7 +112,7 @@ services:
       - .env.docker
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DATABASE_URL}
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     ports:
       - "8080:8080"
@@ -123,7 +134,7 @@ services:
       - .env.docker
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DATABASE_URL}
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     volumes:
       - .:/app

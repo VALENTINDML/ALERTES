@@ -12,3 +12,4 @@ pytest
 prometheus-fastapi-instrumentator
 streamlit-autorefresh
 websocket
+Faker

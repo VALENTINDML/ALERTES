@@ -16,11 +16,11 @@ def normalize_symbol(symbol):
 
 
 def get_project_symbol(binance_symbol):
-    return next(
-        symbol
-        for symbol in SYMBOLS
-        if normalize_symbol(symbol).upper() == binance_symbol
-    )
+    for symbol in SYMBOLS:
+        if normalize_symbol(symbol).upper() == binance_symbol:
+            return symbol
+
+    return None
 
 def get_active_price_alerts(symbol):
     conn = get_connection()
@@ -138,6 +138,10 @@ async def listen_price_stream():
             data = payload["data"]
 
             symbol = get_project_symbol(data["s"])
+
+            if symbol is None:
+                continue
+
             current_price = float(data["p"])
 
             print(f"{symbol} | prix live : {current_price}")

@@ -17,11 +17,11 @@ def normalize_symbol(symbol):
 
 
 def get_project_symbol(binance_symbol):
-    return next(
-        symbol
-        for symbol in SYMBOLS
-        if normalize_symbol(symbol).upper() == binance_symbol
-    )
+    for symbol in SYMBOLS:
+        if normalize_symbol(symbol).upper() == binance_symbol:
+            return symbol
+
+    return None
 
 
 def init_live_market_table():
@@ -122,6 +122,9 @@ async def listen_market_stream():
             kline = payload["data"]["k"]
 
             symbol = get_project_symbol(kline["s"])
+
+            if symbol is None:
+                continue
 
             save_live_candle(symbol, kline)
 
