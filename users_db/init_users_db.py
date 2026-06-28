@@ -25,6 +25,18 @@ def init_users_db():
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+            country_code VARCHAR(2),
+            country TEXT,
+            region TEXT,
+            city TEXT,
+            postal_code TEXT,
+            phone TEXT,
+            phone_code TEXT,
+            currency VARCHAR(10),
+            language VARCHAR(10),
+            timezone TEXT,
+
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
@@ -101,6 +113,18 @@ def init_users_db():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS model_metrics (
+    id SERIAL PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    mae DOUBLE PRECISION NOT NULL,
+    rmse DOUBLE PRECISION NOT NULL,
+    mape DOUBLE PRECISION NOT NULL,
+    r2 DOUBLE PRECISION NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_user_positions_user_id
         ON user_positions(user_id);
     """)
@@ -123,6 +147,16 @@ def init_users_db():
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_notifications_user_id
         ON notifications(user_id);
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_country_code
+        ON users(country_code);
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_city
+        ON users(city);
     """)
 
     conn.commit()
