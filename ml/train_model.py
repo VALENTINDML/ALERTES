@@ -13,12 +13,16 @@ sur les prochaines 24 heures.
 import os
 import joblib
 import pandas as pd
+import numpy as np
+import shutil
 
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
+from datetime import datetime, timedelta, timezone
 
 from config.symbols import SYMBOLS
 from config.db import get_connection
+from config.config_db import DAYS_HISTORY
 
 
 FEATURES = [
@@ -35,50 +39,153 @@ FEATURES = [
 TARGET = "target_24h_percent"
 
 MODELS_DIR = "models"
+MODEL_ARCHIVE_DIR = f"{MODELS_DIR}/archive"
 
+def get_model_path(symbol):
+    safe_symbol = symbol.replace("/", "_")
+    return f"{MODELS_DIR}/{safe_symbol}_model.pkl"
+
+
+def get_archived_model_path(symbol):
+    safe_symbol = symbol.replace("/", "_")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{MODEL_ARCHIVE_DIR}/{safe_symbol}_model_{timestamp}.pkl"
+
+
+def archive_existing_model(symbol):
+    """
+    Archive le modèle actif avant de le remplacer.
+    """
+    model_path = get_model_path(symbol)
+
+    if not os.path.exists(model_path):
+        return None
+
+    os.makedirs(MODEL_ARCHIVE_DIR, exist_ok=True)
+
+    archived_path = get_archived_model_path(symbol)
+
+    shutil.copy2(model_path, archived_path)
+
+    return archived_path
 
 def load_features(symbol):
     """
     Charge les features d'un symbole depuis PostgreSQL.
 
-    Args:
-        symbol (str):
-            Symbole crypto à charger.
-
-    Returns:
-        pd.DataFrame:
-            Dataset complet contenant les features et la cible.
+    Les données sont limitées aux DAYS_HISTORY derniers jours.
+    La dernière ligne est exclue afin d'être réservée à la prédiction.
     """
     conn = get_connection()
+
+    start_datetime = (
+        datetime.now(timezone.utc)
+        - timedelta(days=DAYS_HISTORY)
+    ).replace(tzinfo=None)
 
     query = """
         SELECT *
         FROM features_crypto
         WHERE symbol = %(symbol)s
-        ORDER BY datetime ASC
+          AND datetime >= %(start_datetime)s
+        ORDER BY datetime ASC;
     """
 
     df = pd.read_sql(
         query,
         conn,
-        params={"symbol": symbol}
+        params={
+            "symbol": symbol,
+            "start_datetime": start_datetime,
+        },
     )
 
     conn.close()
 
-    return df
+    if len(df) <= 1:
+        return pd.DataFrame()
 
+    # La dernière ligne est réservée à predict.py.
+    return df.iloc[:-1].copy()
+
+
+def save_metrics(symbol, mae, rmse, mape, r2):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        INSERT INTO model_metrics (
+            symbol,
+            mae,
+            rmse,
+            mape,
+            r2
+        )
+        VALUES (%s,%s,%s,%s,%s);
+        """,
+        (
+            symbol,
+            mae,
+            rmse,
+            mape,
+            r2,
+        )
+    )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def evaluate_model(model, X_test, y_test):
+    predictions = model.predict(X_test)
+
+    mae = mean_absolute_error(y_test, predictions)
+
+    rmse = np.sqrt(
+        mean_squared_error(y_test, predictions)
+    )
+
+    mape = (
+        np.abs((y_test - predictions) / y_test)
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+        .mean()
+        * 100
+    )
+
+    r2 = r2_score(y_test, predictions)
+
+    return {
+        "predictions": predictions,
+        "mae": mae,
+        "rmse": rmse,
+        "mape": mape,
+        "r2": r2,
+    }
+
+
+def is_new_model_better(old_metrics, new_metrics):
+    if new_metrics["rmse"] < old_metrics["rmse"]:
+        return True
+
+    if new_metrics["rmse"] == old_metrics["rmse"]:
+        return new_metrics["mae"] < old_metrics["mae"]
+
+    return False
 
 def train_symbol_model(symbol):
     """
-    Entraîne un modèle RandomForest pour un symbole donné.
+    Entraîne un nouveau modèle RandomForest pour un symbole donné.
 
-    Étapes :
-    - chargement des features ;
-    - séparation train/test chronologique ;
-    - entraînement ;
-    - évaluation ;
-    - sauvegarde du modèle.
+    Si aucun ancien modèle n'existe, le nouveau modèle est sauvegardé.
+
+    Si un ancien modèle existe :
+    - l'ancien modèle est évalué sur le même jeu de test ;
+    - le nouveau modèle est évalué sur le même jeu de test ;
+    - si le nouveau modèle est meilleur, l'ancien est archivé
+      puis le nouveau devient le modèle actif ;
+    - sinon, l'ancien modèle reste actif.
 
     Args:
         symbol (str):
@@ -95,14 +202,15 @@ def train_symbol_model(symbol):
         print(f"Aucune feature trouvée pour {symbol}")
         return
 
+    if len(df) < 10:
+        print(f"Pas assez de données pour entraîner {symbol}")
+        return
+
     print(df[TARGET].describe())
 
     X = df[FEATURES]
     y = df[TARGET]
 
-    # Conserve l'ordre temporel des données.
-    # On évite volontairement un train_test_split aléatoire
-    # pour reproduire un scénario réel de prédiction.
     split_index = int(len(df) * 0.8)
 
     X_train = X.iloc[:split_index]
@@ -111,7 +219,10 @@ def train_symbol_model(symbol):
     y_train = y.iloc[:split_index]
     y_test = y.iloc[split_index:]
 
-    # Random Forest utilisée comme premier modèle baseline.
+    if X_train.empty or X_test.empty:
+        print(f"Split train/test invalide pour {symbol}")
+        return
+
     model = RandomForestRegressor(
         n_estimators=300,
         random_state=42,
@@ -120,31 +231,63 @@ def train_symbol_model(symbol):
 
     model.fit(X_train, y_train)
 
-    predictions = model.predict(X_test)
+    new_metrics = evaluate_model(model, X_test, y_test)
 
-    results=pd.DataFrame({
+    results = pd.DataFrame({
         "real": y_test,
-        "pred": predictions
+        "pred": new_metrics["predictions"],
     })
 
     print(results.head(20))
 
-    mae = mean_absolute_error(y_test, predictions)
-    r2 = r2_score(y_test, predictions)
-
-    print(f"{symbol} - MAE : {mae:.4f}%")
-    print(f"{symbol} - R2  : {r2:.4f}")
+    print(f"{symbol} - Nouveau modèle")
+    print(f"MAE  : {new_metrics['mae']:.4f}%")
+    print(f"RMSE : {new_metrics['rmse']:.4f}%")
+    print(f"MAPE : {new_metrics['mape']:.2f}%")
+    print(f"R2   : {new_metrics['r2']:.4f}")
 
     os.makedirs(MODELS_DIR, exist_ok=True)
 
-    # Un modèle est sauvegardé par symbole.
-    safe_symbol = symbol.replace("/", "_")
-    model_path = f"{MODELS_DIR}/{safe_symbol}_model.pkl"
+    model_path = get_model_path(symbol)
 
-    joblib.dump(model, model_path)
+    should_save_new_model = True
 
-    print(f"Modèle sauvegardé : {model_path}\n")
+    if os.path.exists(model_path):
+        old_model = joblib.load(model_path)
 
+        old_metrics = evaluate_model(old_model, X_test, y_test)
+
+        print(f"{symbol} - Ancien modèle")
+        print(f"MAE  : {old_metrics['mae']:.4f}%")
+        print(f"RMSE : {old_metrics['rmse']:.4f}%")
+        print(f"MAPE : {old_metrics['mape']:.2f}%")
+        print(f"R2   : {old_metrics['r2']:.4f}")
+
+        should_save_new_model = is_new_model_better(
+            old_metrics,
+            new_metrics,
+        )
+
+    if should_save_new_model:
+        archived_path = archive_existing_model(symbol)
+
+        joblib.dump(model, model_path)
+
+        save_metrics(
+            symbol,
+            new_metrics["mae"],
+            new_metrics["rmse"],
+            new_metrics["mape"],
+            new_metrics["r2"],
+        )
+
+        if archived_path:
+            print(f"Ancien modèle archivé : {archived_path}")
+
+        print(f"Nouveau modèle accepté et sauvegardé : {model_path}\n")
+
+    else:
+        print(f"Nouveau modèle refusé pour {symbol}. Ancien modèle conservé.\n")
 
 def main():
     """
