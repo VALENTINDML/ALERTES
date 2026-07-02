@@ -1,37 +1,56 @@
 """
-API FastAPI du projet Crypto Alerts.
+API FastAPI robuste pour Crypto Alerts.
 
-Cette API expose des endpoints de lecture permettant au dashboard Streamlit
-et à d'autres futurs clients d'accéder aux données du projet :
-utilisateurs, prédictions, notifications et dernières données de marché.
+Optimisations :
+- limites maximales sur les endpoints de listing ;
+- cache léger pour les endpoints statistiques ;
+- requêtes mieux encadrées ;
+- endpoints compatibles gros volume.
 """
-from fastapi import FastAPI
-from config.db import get_connection
+
+import time
+from functools import wraps
+
+from fastapi import FastAPI, Query
 from prometheus_fastapi_instrumentator import Instrumentator
+
+from config.db import get_connection
 
 
 app = FastAPI(
-    title="Alertes API",
-    description="API du MVP de prédiction et d'alertes crypto",
-    version="1.0.0",
+    title="Crypto Alerts API",
+    description="API du projet Crypto Alerts",
+    version="1.1.0",
 )
 
 Instrumentator().instrument(app).expose(app)
 
+CACHE = {}
+CACHE_TTL_SECONDS = 10
+
+
+def cached(key, ttl=CACHE_TTL_SECONDS):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            now = time.time()
+            cache_key = f"{key}:{args}:{kwargs}"
+
+            if cache_key in CACHE:
+                created_at, value = CACHE[cache_key]
+                if now - created_at < ttl:
+                    return value
+
+            value = func(*args, **kwargs)
+            CACHE[cache_key] = (now, value)
+            return value
+
+        return wrapper
+
+    return decorator
+
+
 def fetch_one(query, params=None):
-    """
-    Exécute une requête SQL retournant une seule ligne.
-
-    Args:
-        query (str):
-            Requête SQL à exécuter.
-        params (tuple | None):
-            Paramètres optionnels de la requête.
-
-    Returns:
-        tuple | None:
-            Première ligne retournée par PostgreSQL.
-    """
     conn = get_connection()
     cur = conn.cursor()
 
@@ -45,19 +64,6 @@ def fetch_one(query, params=None):
 
 
 def fetch_all(query, params=None):
-    """
-    Exécute une requête SQL retournant plusieurs lignes.
-
-    Args:
-        query (str):
-            Requête SQL à exécuter.
-        params (tuple | None):
-            Paramètres optionnels de la requête.
-
-    Returns:
-        list[tuple]:
-            Liste des lignes retournées par PostgreSQL.
-    """
     conn = get_connection()
     cur = conn.cursor()
 
@@ -72,34 +78,23 @@ def fetch_all(query, params=None):
 
 @app.get("/health")
 def health():
-    """
-    Vérifie que l'API est disponible.
-    """
-    return {
-        "status": "ok"
-    }
+    return {"status": "ok"}
 
 
 @app.get("/users/count")
+@cached("users_count", ttl=30)
 def users_count():
-    """
-    Retourne le nombre total d'utilisateurs.
-    """
     row = fetch_one("""
         SELECT COUNT(*)
         FROM users;
     """)
 
-    return {
-        "users_count": row[0]
-    }
+    return {"users_count": row[0]}
 
 
 @app.get("/predictions/latest")
+@cached("predictions_latest", ttl=10)
 def latest_predictions():
-    """
-    Retourne la dernière prédiction disponible pour chaque symbole.
-    """
     rows = fetch_all("""
         SELECT DISTINCT ON (symbol)
             id,
@@ -125,21 +120,16 @@ def latest_predictions():
     ]
 
 
-
 @app.get("/notifications/latest")
-def latest_notifications(limit: int = 20):
-    """
-    Retourne les dernières notifications générées.
-
-    Args:
-        limit (int):
-            Nombre maximum de notifications à retourner.
-    """
+def latest_notifications(
+    limit: int = Query(default=20, ge=1, le=200),
+):
     rows = fetch_all("""
         SELECT
             id,
             user_id,
             prediction_id,
+            price_alert_id,
             symbol,
             notification_type,
             message,
@@ -155,25 +145,20 @@ def latest_notifications(limit: int = 20):
             "id": row[0],
             "user_id": row[1],
             "prediction_id": row[2],
-            "symbol": row[3],
-            "notification_type": row[4],
-            "message": row[5],
-            "status": row[6],
-            "created_at": row[7],
+            "price_alert_id": row[3],
+            "symbol": row[4],
+            "notification_type": row[5],
+            "message": row[6],
+            "status": row[7],
+            "created_at": row[8],
         }
         for row in rows
     ]
 
 
 @app.get("/market/latest")
+@cached("market_latest", ttl=10)
 def latest_market_data(symbol: str = "BTC/USDT"):
-    """
-    Retourne la dernière bougie OHLCV disponible pour un symbole.
-
-    Args:
-        symbol (str):
-            Symbole crypto à consulter.
-    """
     row = fetch_one("""
         SELECT
             symbol,
@@ -190,9 +175,7 @@ def latest_market_data(symbol: str = "BTC/USDT"):
     """, (symbol,))
 
     if row is None:
-        return {
-            "error": f"Aucune donnée trouvée pour {symbol}"
-        }
+        return {"error": f"Aucune donnée trouvée pour {symbol}"}
 
     return {
         "symbol": row[0],
@@ -205,11 +188,48 @@ def latest_market_data(symbol: str = "BTC/USDT"):
     }
 
 
+@app.get("/market/live")
+def live_market_data(symbol: str = "BTC/USDT"):
+    row = fetch_one("""
+        SELECT
+            symbol,
+            timestamp,
+            datetime,
+            timeframe,
+            open,
+            high,
+            low,
+            close,
+            volume,
+            is_closed,
+            updated_at
+        FROM live_market_data
+        WHERE symbol = %s
+        ORDER BY updated_at DESC
+        LIMIT 1;
+    """, (symbol,))
+
+    if row is None:
+        return {"error": f"Aucune donnée live disponible pour {symbol}"}
+
+    return {
+        "symbol": row[0],
+        "timestamp": row[1],
+        "datetime": row[2],
+        "timeframe": row[3],
+        "open": row[4],
+        "high": row[5],
+        "low": row[6],
+        "close": row[7],
+        "volume": row[8],
+        "is_closed": row[9],
+        "updated_at": row[10],
+    }
+
+
 @app.get("/daily-alerts/count")
+@cached("daily_alerts_count", ttl=30)
 def daily_alerts_count():
-    """
-    Retourne la répartition des alertes quotidiennes activées/désactivées.
-    """
     rows = fetch_all("""
         SELECT enabled, COUNT(*)
         FROM daily_alert_preferences
@@ -225,15 +245,29 @@ def daily_alerts_count():
     ]
 
 
-@app.get("/notifications/by-type")
-def notifications_by_type():
-    """
-    Retourne le nombre de notifications par type et par statut.
+@app.get("/notifications/stats")
+@cached("notifications_stats", ttl=30)
+def notifications_stats():
+    rows = fetch_all("""
+        SELECT
+            notification_type,
+            COUNT(*)
+        FROM notifications
+        GROUP BY notification_type;
+    """)
 
-    Permet de distinguer :
-    - daily_prediction : notifications issues des prédictions ML ;
-    - price_target : notifications issues des alertes prix temps réel.
-    """
+    return [
+        {
+            "notification_type": row[0],
+            "count": row[1],
+        }
+        for row in rows
+    ]
+
+
+@app.get("/notifications/by-type")
+@cached("notifications_by_type", ttl=30)
+def notifications_by_type():
     rows = fetch_all("""
         SELECT
             notification_type,
@@ -255,18 +289,15 @@ def notifications_by_type():
 
 
 @app.get("/notifications/price-target/latest")
-def latest_price_target_notifications(limit: int = 20):
-    """
-    Retourne les dernières notifications issues des alertes de prix.
-
-    Ces notifications proviennent du service de streaming Binance
-    et ont notification_type = 'price_target'.
-    """
+def latest_price_target_notifications(
+    limit: int = Query(default=20, ge=1, le=200),
+):
     rows = fetch_all("""
         SELECT
             n.id,
             n.user_id,
             u.email,
+            n.price_alert_id,
             n.symbol,
             n.message,
             n.status,
@@ -284,46 +315,7 @@ def latest_price_target_notifications(limit: int = 20):
             "id": row[0],
             "user_id": row[1],
             "email": row[2],
-            "symbol": row[3],
-            "message": row[4],
-            "status": row[5],
-            "created_at": row[6],
-        }
-        for row in rows
-    ]
-
-
-@app.get("/notifications/daily-prediction/latest")
-def latest_daily_prediction_notifications(limit: int = 20):
-    """
-    Retourne les dernières notifications issues des prédictions ML.
-
-    Ces notifications ont notification_type = 'daily_prediction'.
-    """
-    rows = fetch_all("""
-        SELECT
-            n.id,
-            n.user_id,
-            u.email,
-            n.prediction_id,
-            n.symbol,
-            n.message,
-            n.status,
-            n.created_at
-        FROM notifications n
-        JOIN users u
-            ON n.user_id = u.id
-        WHERE n.notification_type = 'daily_prediction'
-        ORDER BY n.created_at DESC
-        LIMIT %s;
-    """, (limit,))
-
-    return [
-        {
-            "id": row[0],
-            "user_id": row[1],
-            "email": row[2],
-            "prediction_id": row[3],
+            "price_alert_id": row[3],
             "symbol": row[4],
             "message": row[5],
             "status": row[6],
@@ -334,12 +326,9 @@ def latest_daily_prediction_notifications(limit: int = 20):
 
 
 @app.get("/price-alerts/latest")
-def latest_price_alerts(limit: int = 20):
-    """
-    Retourne les dernières alertes de prix configurées par les utilisateurs.
-
-    Cette table représente les seuils surveillés par le service streaming.
-    """
+def latest_price_alerts(
+    limit: int = Query(default=20, ge=1, le=200),
+):
     rows = fetch_all("""
         SELECT
             pa.id,
@@ -375,9 +364,10 @@ def latest_price_alerts(limit: int = 20):
 
 
 @app.get("/metrics/model/latest")
+@cached("model_metrics_latest", ttl=30)
 def latest_model_metrics():
     rows = fetch_all("""
-        SELECT
+        SELECT DISTINCT ON (symbol)
             symbol,
             mae,
             rmse,
@@ -385,7 +375,7 @@ def latest_model_metrics():
             r2,
             created_at
         FROM model_metrics
-        ORDER BY created_at DESC;
+        ORDER BY symbol, created_at DESC;
     """)
 
     return [
@@ -396,70 +386,6 @@ def latest_model_metrics():
             "mape": row[3],
             "r2": row[4],
             "created_at": row[5],
-        }
-        for row in rows
-    ]
-
-@app.get("/market/live")
-def live_market_data(symbol: str = "BTC/USDT"):
-    """
-    Retourne la dernière bougie live reçue depuis le WebSocket Binance.
-    """
-    row = fetch_one("""
-        SELECT
-            symbol,
-            timestamp,
-            datetime,
-            timeframe,
-            open,
-            high,
-            low,
-            close,
-            volume,
-            is_closed,
-            updated_at
-        FROM live_market_data
-        WHERE symbol = %s
-        ORDER BY updated_at DESC
-        LIMIT 1;
-    """, (symbol,))
-
-    if row is None:
-        return {
-            "error": f"Aucune donnée live disponible pour {symbol}"
-        }
-
-    return {
-        "symbol": row[0],
-        "timestamp": row[1],
-        "datetime": row[2],
-        "timeframe": row[3],
-        "open": row[4],
-        "high": row[5],
-        "low": row[6],
-        "close": row[7],
-        "volume": row[8],
-        "is_closed": row[9],
-        "updated_at": row[10],
-    }
-
-@app.get("/notifications/stats")
-def notifications_stats():
-    """
-    Retourne le nombre d'alertes envoyées quotidiennes et personnalisées 
-    """
-    rows = fetch_all("""
-        SELECT
-            notification_type,
-            COUNT(*)
-        FROM notifications
-        GROUP BY notification_type;
-    """)
-
-    return [
-        {
-            "notification_type": row[0],
-            "count": row[1]
         }
         for row in rows
     ]
