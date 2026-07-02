@@ -1,12 +1,18 @@
 """
 Génération d'utilisateurs fictifs.
 
-Ce script permet d'ajouter un nombre variable de faux utilisateurs
-dans la base PostgreSQL, ainsi que leurs positions BTC/USDT et leurs
-préférences d'alertes quotidiennes.
+Ce script ajoute des utilisateurs fictifs dans PostgreSQL, ainsi que :
+- leurs positions crypto ;
+- leurs préférences d'alertes quotidiennes ;
+- leurs alertes de prix personnalisées.
 
-Il est relançable plusieurs fois : chaque exécution ajoute de nouveaux
-utilisateurs sans modifier ceux déjà présents.
+La répartition des cryptos dépend du niveau de hype défini dans
+config/symbols.py.
+
+Plus une crypto a un score de hype élevé, plus elle a de chances :
+- d'être détenue par un utilisateur ;
+- d'avoir une alerte quotidienne activée ;
+- de générer des alertes de prix.
 """
 
 import random
@@ -17,20 +23,14 @@ from faker import Faker
 from psycopg2.extras import execute_values
 
 from config.db import get_connection
-from config.symbols import SYMBOLS
+from config.symbols import SYMBOLS, REFERENCE_PRICES, SYMBOL_HYPE
 
 
 DEFAULT_TOTAL_USERS = 1000
 
-REFERENCE_PRICES = {
-    "BTC/USDT": 53477,
-    "ETH/USDT": 2800,
-    "SOL/USDT": 145,
-    "BNB/USDT": 590,
-    "XRP/USDT": 0.55,
-    "ADA/USDT": 0.42,
-    "DOGE/USDT": 0.12,
-}
+# Taux global aléatoire à chaque exécution.
+# Cela évite un résultat trop proche de 50/50.
+DAILY_ALERT_BASE_RATE = random.uniform(0.25, 0.85)
 
 COUNTRIES = {
     "FR": {
@@ -70,7 +70,7 @@ COUNTRIES = {
             {"city": "San Antonio", "region": "Texas", "postal_code": "78201"},
             {"city": "San Diego", "region": "California", "postal_code": "92101"},
             {"city": "Dallas", "region": "Texas", "postal_code": "75201"},
-            {"city": "Miami", "region": "Florida", "postal_code": "33101"},     
+            {"city": "Miami", "region": "Florida", "postal_code": "33101"},
         ],
     },
     "DE": {
@@ -135,25 +135,13 @@ COUNTRIES = {
     },
 }
 
+
 def generate_country_weights():
-    """
-    Génère une répartition aléatoire mais non uniforme des pays
-    à chaque exécution du script.
-
-    Exemple possible :
-    FR = 78
-    US = 42
-    DE = 95
-    ES = 31
-    IT = 64
-
-    Les pays restent choisis au hasard, mais certains auront
-    plus de chances d'être sélectionnés que d'autres.
-    """
     return {
         country_code: random.randint(20, 100)
         for country_code in COUNTRIES.keys()
     }
+
 
 COUNTRY_WEIGHTS = generate_country_weights()
 
@@ -190,12 +178,6 @@ def get_next_user_index():
 
 
 def choose_country_code():
-    """
-    Choisit un pays au hasard avec une répartition aléatoire
-    mais non uniforme.
-
-    Les poids sont générés au lancement du script.
-    """
     return random.choices(
         population=list(COUNTRY_WEIGHTS.keys()),
         weights=list(COUNTRY_WEIGHTS.values()),
@@ -256,6 +238,62 @@ def generate_phone(country_code, phone_code):
     return f"{phone_code} {digits}"
 
 
+def get_symbol_hype(symbol):
+    return SYMBOL_HYPE.get(symbol, 10)
+
+
+def choose_symbols_by_hype(total_symbols):
+    """
+    Choisit plusieurs cryptos pour un utilisateur en fonction du niveau de hype.
+
+    Une crypto avec hype élevée a plus de chances d'être choisie.
+    """
+    available_symbols = SYMBOLS.copy()
+    selected_symbols = []
+
+    for _ in range(min(total_symbols, len(available_symbols))):
+        weights = [
+            get_symbol_hype(symbol)
+            for symbol in available_symbols
+        ]
+
+        selected_symbol = random.choices(
+            population=available_symbols,
+            weights=weights,
+            k=1,
+        )[0]
+
+        selected_symbols.append(selected_symbol)
+        available_symbols.remove(selected_symbol)
+
+    return selected_symbols
+
+
+def get_reference_price(symbol):
+    return REFERENCE_PRICES.get(symbol, 100)
+
+
+def get_daily_alert_probability(symbol):
+    """
+    Calcule une probabilité d'activation des alertes quotidiennes.
+
+    Elle dépend :
+    - d'un taux global aléatoire à chaque exécution ;
+    - du niveau de hype du symbole.
+
+    Exemple :
+    - BTC avec hype 100 aura plus de chances d'être activé ;
+    - ADA avec hype 35 aura moins de chances.
+    """
+    hype = get_symbol_hype(symbol)
+
+    hype_factor = hype / 100
+
+    probability = DAILY_ALERT_BASE_RATE * (0.5 + hype_factor)
+
+    return min(probability, 0.95)
+
+
 def generate_users(total_users):
     start_index = get_next_user_index()
     end_index = start_index + total_users
@@ -301,12 +339,6 @@ def generate_users(total_users):
 
 
 def save_users(users):
-    """
-    Insère les utilisateurs fictifs dans PostgreSQL.
-
-    Returns:
-        list[int]: IDs des utilisateurs réellement insérés.
-    """
     conn = get_connection()
     cur = conn.cursor()
 
@@ -345,52 +377,23 @@ def save_users(users):
     return [row[0] for row in inserted_rows]
 
 
-def get_reference_price(symbol):
-    """
-    Retourne un prix de référence pour chaque crypto.
-
-    Si le symbole n'est pas défini dans REFERENCE_PRICES,
-    on utilise un prix par défaut pour éviter que le script plante.
-    """
-    return REFERENCE_PRICES.get(symbol, 100)
-
-
 def get_total_positions_for_user():
-    """
-    Définit combien de cryptos différentes un utilisateur possède.
-
-    La majorité des utilisateurs auront peu de positions.
-    """
     return random.choices(
         [1, 2, 3, 4, 5],
         weights=[35, 30, 20, 10, 5],
+        k=1,
     )[0]
 
 
 def get_total_buys_for_symbol():
-    """
-    Définit combien d'achats différents existent pour une même crypto.
-
-    Exemple :
-    - un utilisateur peut avoir acheté BTC une seule fois ;
-    - ou avoir acheté BTC plusieurs fois à des prix différents.
-    """
     return random.choices(
         [1, 2, 3],
         weights=[70, 25, 5],
+        k=1,
     )[0]
 
 
 def generate_positions(user_ids):
-    """
-    Génère des positions crypto fictives.
-
-    Logique :
-    - chaque utilisateur possède plusieurs cryptos différentes ;
-    - pour chaque crypto, il peut avoir un ou plusieurs achats ;
-    - chaque achat devient une ligne dans user_positions ;
-    - le prix d'achat dépend du symbole crypto.
-    """
     conn = get_connection()
     cur = conn.cursor()
 
@@ -401,13 +404,10 @@ def generate_positions(user_ids):
     for user_id in user_ids:
         total_symbols = min(
             get_total_positions_for_user(),
-            max_symbols_per_user
+            max_symbols_per_user,
         )
 
-        user_symbols = random.sample(
-            SYMBOLS,
-            total_symbols
-        )
+        user_symbols = choose_symbols_by_hype(total_symbols)
 
         for symbol in user_symbols:
             total_buys = get_total_buys_for_symbol()
@@ -415,7 +415,6 @@ def generate_positions(user_ids):
 
             for _ in range(total_buys):
                 buy_price = reference_price * random.uniform(0.85, 1.15)
-
                 quantity = round(random.uniform(0.01, 2.0), 4)
 
                 buy_datetime = (
@@ -466,13 +465,20 @@ def generate_alert_preferences(user_ids):
 
     preferences = []
 
+    print(
+        "Taux global d'activation des alertes quotidiennes : "
+        f"{DAILY_ALERT_BASE_RATE:.2%}"
+    )
+
     for user_id in user_ids:
         for symbol in SYMBOLS:
+            enabled = random.random() < get_daily_alert_probability(symbol)
+
             preferences.append(
                 (
                     user_id,
                     symbol,
-                    random.choice([True, False]),
+                    enabled,
                 )
             )
 
@@ -515,6 +521,13 @@ def generate_price_alerts(user_ids):
     price_alerts = []
 
     for user_id, symbol, buy_price in positions:
+        hype = get_symbol_hype(symbol)
+
+        create_alert_probability = min(0.35 + (hype / 200), 0.9)
+
+        if random.random() > create_alert_probability:
+            continue
+
         direction = random.choice(["above", "below"])
 
         if direction == "above":
@@ -559,6 +572,7 @@ def main():
     total_users = get_total_users_to_generate()
 
     print("Répartition aléatoire des pays :", COUNTRY_WEIGHTS)
+    print("Hype des cryptos :", SYMBOL_HYPE)
 
     users = generate_users(total_users)
 
@@ -569,9 +583,7 @@ def main():
         return
 
     generate_positions(new_user_ids)
-
     generate_alert_preferences(new_user_ids)
-
     generate_price_alerts(new_user_ids)
 
     print(f"{len(new_user_ids)} nouveaux utilisateurs générés.")
