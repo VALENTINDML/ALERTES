@@ -1,6 +1,7 @@
 """
-Dashboard Streamlit du projet Crypto Alerts.
+Dashboard Streamlit robuste du projet Crypto Alerts.
 """
+
 import os
 
 import pandas as pd
@@ -11,29 +12,27 @@ from streamlit_autorefresh import st_autorefresh
 
 API_URL = os.getenv("API_URL", "http://api:8000")
 
-
 st.set_page_config(
-    page_title="Alertes Dashboard",
+    page_title="Crypto Alerts Dashboard",
     page_icon="📊",
     layout="wide",
 )
 
-st_autorefresh(interval=2000, key="live_refresh")
+st_autorefresh(interval=10000, key="dashboard_refresh")
 
 
+@st.cache_data(ttl=10)
 def get_api_data(endpoint):
     try:
         response = requests.get(f"{API_URL}{endpoint}", timeout=5)
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        st.error(f"Erreur API : {e}")
-        return None
+        return {"error": str(e)}
 
 
 st.title("📊 Crypto Alerts Dashboard")
-st.caption("Dashboard MVP — Prédiction crypto + alertes utilisateurs")
-
+st.caption("Dashboard MVP robuste — prédiction crypto + alertes utilisateurs")
 
 health = get_api_data("/health")
 
@@ -58,24 +57,23 @@ col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric(
         "Utilisateurs",
-        users_count["users_count"] if users_count else 0,
+        users_count.get("users_count", 0)
+        if isinstance(users_count, dict)
+        else 0,
     )
 
 with col2:
     total_notifications = 0
 
-    if notifications_stats:
+    if isinstance(notifications_stats, list):
         total_notifications = sum(
             item["count"] for item in notifications_stats
         )
 
-    st.metric(
-        "Notifications",
-        total_notifications,
-    )
+    st.metric("Notifications", total_notifications)
 
 with col3:
-    if market_latest and "close" in market_latest:
+    if isinstance(market_latest, dict) and "close" in market_latest:
         st.metric(
             "Prix utilisé par le modèle",
             f"{market_latest['close']:.2f} USDT",
@@ -84,7 +82,7 @@ with col3:
         st.metric("Prix utilisé par le modèle", "N/A")
 
 with col4:
-    if latest_predictions:
+    if isinstance(latest_predictions, list) and latest_predictions:
         pred = latest_predictions[0]
         st.metric(
             "Prévision 24h",
@@ -96,9 +94,9 @@ with col4:
 
 
 st.divider()
-st.subheader("📡 Bougie live BTC/USDT — 1h")
+st.subheader("📡 Bougie live BTC/USDT")
 
-if live_market and "error" not in live_market:
+if isinstance(live_market, dict) and "error" not in live_market:
     c1, c2, c3, c4, c5 = st.columns(5)
 
     c1.metric("Open", f"{live_market['open']:.2f}")
@@ -115,24 +113,17 @@ if live_market and "error" not in live_market:
         "updated_at": live_market["updated_at"],
     })
 else:
-    st.info("Aucune donnée live disponible pour le moment.")
-
-
-st.divider()
-st.subheader("💰 Dernière bougie historique BTC/USDT")
-
-if market_latest and "error" not in market_latest:
-    st.json(market_latest)
-else:
-    st.info("Aucune donnée marché disponible.")
+    st.info("Aucune donnée live disponible.")
 
 
 st.divider()
 st.subheader("🔮 Dernières prédictions")
 
-if latest_predictions:
-    df_predictions = pd.DataFrame(latest_predictions)
-    st.dataframe(df_predictions, use_container_width=True)
+if isinstance(latest_predictions, list) and latest_predictions:
+    st.dataframe(
+        pd.DataFrame(latest_predictions),
+        use_container_width=True,
+    )
 else:
     st.info("Aucune prédiction disponible.")
 
@@ -140,7 +131,7 @@ else:
 st.divider()
 st.subheader("📈 Performance du modèle")
 
-if model_metrics:
+if isinstance(model_metrics, list) and model_metrics:
     df_metrics = pd.DataFrame(model_metrics)
     st.dataframe(df_metrics, use_container_width=True)
 
@@ -150,7 +141,6 @@ if model_metrics:
         btc = btc_metrics.iloc[0]
 
         c1, c2, c3, c4 = st.columns(4)
-
         c1.metric("MAE", f"{btc['mae']:.2f}%")
         c2.metric("RMSE", f"{btc['rmse']:.2f}%")
         c3.metric("MAPE", f"{btc['mape']:.2f}%")
@@ -162,10 +152,11 @@ else:
 st.divider()
 st.subheader("📩 Notifications par type")
 
-if notifications_stats:
-    df_notifications_stats = pd.DataFrame(notifications_stats)
-
-    st.dataframe(df_notifications_stats, use_container_width=True)
+if isinstance(notifications_stats, list) and notifications_stats:
+    st.dataframe(
+        pd.DataFrame(notifications_stats),
+        use_container_width=True,
+    )
 else:
     st.info("Aucune statistique de notification disponible.")
 
@@ -173,10 +164,11 @@ else:
 st.divider()
 st.subheader("📬 Notifications par type et statut")
 
-if notifications_by_type:
-    df_notifications_by_type = pd.DataFrame(notifications_by_type)
-
-    st.dataframe(df_notifications_by_type, use_container_width=True)
+if isinstance(notifications_by_type, list) and notifications_by_type:
+    st.dataframe(
+        pd.DataFrame(notifications_by_type),
+        use_container_width=True,
+    )
 else:
     st.info("Aucune notification disponible.")
 
@@ -184,7 +176,7 @@ else:
 st.divider()
 st.subheader("🔔 Alertes quotidiennes")
 
-if daily_alerts:
+if isinstance(daily_alerts, list) and daily_alerts:
     df_alerts = pd.DataFrame(daily_alerts)
 
     df_alerts["enabled"] = df_alerts["enabled"].map({
@@ -192,9 +184,6 @@ if daily_alerts:
         False: "Désactivées",
     })
 
-    st.dataframe(
-        df_alerts,
-        use_container_width=True,
-    )
+    st.dataframe(df_alerts, use_container_width=True)
 else:
     st.info("Aucune préférence d'alerte disponible.")
