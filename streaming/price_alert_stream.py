@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime
+import time
 
 import websockets
 
@@ -9,6 +9,11 @@ from config.symbols import SYMBOLS
 
 
 BINANCE_WS_URL = "wss://stream.binance.com:9443/stream?streams="
+
+BATCH_SIZE = 5000
+PRICE_PROCESS_INTERVAL_SECONDS = 1.0
+
+last_processed_at = {}
 
 
 def normalize_symbol(symbol):
@@ -19,110 +24,153 @@ def get_project_symbol(binance_symbol):
     for symbol in SYMBOLS:
         if normalize_symbol(symbol).upper() == binance_symbol:
             return symbol
-
     return None
 
-def get_active_price_alerts(symbol):
+
+def should_process_symbol(symbol):
+    now = time.time()
+    previous = last_processed_at.get(symbol, 0)
+
+    if now - previous < PRICE_PROCESS_INTERVAL_SECONDS:
+        return False
+
+    last_processed_at[symbol] = now
+    return True
+
+
+def process_triggered_alerts_batch(symbol, current_price):
+    """
+    Déclenche les alertes prix directement côté SQL.
+
+    Le SQL :
+    - sélectionne uniquement les alertes réellement déclenchées ;
+    - verrouille les lignes avec FOR UPDATE SKIP LOCKED ;
+    - insère les notifications en batch ;
+    - désactive les alertes déclenchées ;
+    - évite les doublons via price_alert_id.
+    """
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT
-            pa.id,
-            pa.user_id,
-            pa.symbol,
-            pa.target_price,
-            pa.direction
-        FROM price_alerts pa
-        JOIN users u
-            ON pa.user_id = u.id
-        WHERE pa.symbol = %s
-          AND pa.is_active = TRUE
-          AND u.is_active = TRUE;
-    """, (symbol,))
-
-    alerts = cur.fetchall()
-
-    cur.close()
-    conn.close()
-
-    return alerts
-
-
-def should_trigger_alert(current_price, target_price, direction):
-    if direction == "above":
-        return current_price >= target_price
-
-    if direction == "below":
-        return current_price <= target_price
-
-    return False
-
-
-def create_price_notification(alert, current_price):
-    alert_id, user_id, symbol, target_price, direction = alert
-
-    conn = get_connection()
-    cur = conn.cursor()
-
-    message = (
-        f"Alerte prix {symbol} : "
-        f"prix actuel {current_price:.2f}, "
-        f"objectif {target_price:.2f}, "
-        f"direction {direction}."
-    )
-
-    cur.execute("""
-        INSERT INTO notifications (
-            user_id,
-            prediction_id,
+    try:
+        cur.execute("""
+            WITH triggered AS (
+                SELECT
+                    pa.id AS price_alert_id,
+                    pa.user_id,
+                    pa.symbol,
+                    pa.target_price,
+                    pa.direction
+                FROM price_alerts pa
+                JOIN users u
+                    ON u.id = pa.user_id
+                WHERE pa.symbol = %s
+                  AND pa.is_active = TRUE
+                  AND u.is_active = TRUE
+                  AND (
+                        (pa.direction = 'above' AND pa.target_price <= %s)
+                     OR (pa.direction = 'below' AND pa.target_price >= %s)
+                  )
+                ORDER BY pa.target_price
+                LIMIT %s
+                FOR UPDATE OF pa SKIP LOCKED
+            ),
+            inserted AS (
+                INSERT INTO notifications (
+                    user_id,
+                    prediction_id,
+                    price_alert_id,
+                    symbol,
+                    notification_type,
+                    message,
+                    status,
+                    sent_at
+                )
+                SELECT
+                    user_id,
+                    NULL,
+                    price_alert_id,
+                    symbol,
+                    'price_target',
+                    CONCAT(
+                        'Alerte prix ', symbol,
+                        ' : prix actuel ', %s,
+                        ', objectif ', target_price,
+                        ', direction ', direction,
+                        '.'
+                    ),
+                    'pending',
+                    NULL
+                FROM triggered
+                ON CONFLICT DO NOTHING
+                RETURNING price_alert_id
+            ),
+            updated AS (
+                UPDATE price_alerts pa
+                SET is_active = FALSE,
+                    triggered_at = CURRENT_TIMESTAMP
+                WHERE pa.id IN (
+                    SELECT price_alert_id FROM inserted
+                )
+                RETURNING pa.id
+            )
+            SELECT
+                (SELECT COUNT(*) FROM triggered) AS triggered_count,
+                (SELECT COUNT(*) FROM inserted) AS inserted_count,
+                (SELECT COUNT(*) FROM updated) AS updated_count;
+        """, (
             symbol,
-            notification_type,
-            message,
-            status,
-            sent_at
+            current_price,
+            current_price,
+            BATCH_SIZE,
+            round(current_price, 4),
+        ))
+
+        result = cur.fetchone()
+        conn.commit()
+
+        triggered_count, inserted_count, updated_count = result
+
+        return {
+            "triggered": triggered_count,
+            "inserted": inserted_count,
+            "updated": updated_count,
+        }
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+def process_price_event(symbol, current_price):
+    total_triggered = 0
+    total_inserted = 0
+    total_updated = 0
+
+    while True:
+        result = process_triggered_alerts_batch(symbol, current_price)
+
+        total_triggered += result["triggered"]
+        total_inserted += result["inserted"]
+        total_updated += result["updated"]
+
+        if result["triggered"] < BATCH_SIZE:
+            break
+
+    if total_triggered > 0:
+        print(
+            f"{symbol} | prix={current_price} | "
+            f"alertes déclenchées={total_triggered} | "
+            f"notifications créées={total_inserted} | "
+            f"alertes désactivées={total_updated}"
         )
-        VALUES (%s, NULL, %s, %s, %s, %s, NULL);
-    """, (
-        user_id,
-        symbol,
-        "price_target",
-        message,
-        "pending",
-    ))
-
-    cur.execute("""
-        UPDATE price_alerts
-        SET is_active = FALSE,
-            triggered_at = %s
-        WHERE id = %s;
-    """, (
-        datetime.now(),
-        alert_id,
-    ))
-
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    print(
-        f"Notification price_target créée | "
-        f"user_id={user_id} | {symbol} | prix={current_price}"
-    )
-
-
-def check_price_alerts(symbol, current_price):
-    alerts = get_active_price_alerts(symbol)
-
-    for alert in alerts:
-        _, _, _, target_price, direction = alert
-
-        if should_trigger_alert(current_price, target_price, direction):
-            create_price_notification(alert, current_price)
 
 
 async def listen_price_stream():
-
     streams = "/".join(
         f"{normalize_symbol(symbol)}@trade"
         for symbol in SYMBOLS
@@ -132,21 +180,33 @@ async def listen_price_stream():
 
     print(f"Connexion WebSocket prix Binance : {url}")
 
-    async with websockets.connect(url, ping_interval=20, ping_timeout=20) as websocket:
+    async with websockets.connect(
+        url,
+        ping_interval=20,
+        ping_timeout=20,
+        close_timeout=10,
+    ) as websocket:
         async for message in websocket:
             payload = json.loads(message)
-            data = payload["data"]
+            data = payload.get("data", {})
 
-            symbol = get_project_symbol(data["s"])
+            binance_symbol = data.get("s")
+            price = data.get("p")
+
+            if not binance_symbol or not price:
+                continue
+
+            symbol = get_project_symbol(binance_symbol)
 
             if symbol is None:
                 continue
 
-            current_price = float(data["p"])
+            if not should_process_symbol(symbol):
+                continue
 
-            print(f"{symbol} | prix live : {current_price}")
+            current_price = float(price)
 
-            check_price_alerts(symbol, current_price)
+            process_price_event(symbol, current_price)
 
 
 async def main():
