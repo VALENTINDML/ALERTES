@@ -1,210 +1,118 @@
 """
-Génération des notifications quotidiennes.
+Génération robuste des notifications quotidiennes.
 
-Ce script récupère les dernières prédictions disponibles,
-identifie les utilisateurs ayant activé les alertes pour chaque symbole,
-puis génère les notifications à envoyer.
+Cette version est pensée pour de gros volumes :
+- millions d'utilisateurs ;
+- génération massive de notifications ;
+- pas de chargement des utilisateurs en mémoire Python ;
+- insertion directe côté PostgreSQL via INSERT ... SELECT ;
+- idempotence via ON CONFLICT DO NOTHING.
 
-Les notifications sont stockées dans PostgreSQL avec le statut "pending".
-L'envoi réel (email, Telegram, Discord, etc.) pourra être ajouté ultérieurement.
+Le script récupère la dernière prédiction disponible pour chaque symbole,
+puis crée une notification quotidienne pour tous les utilisateurs actifs
+ayant activé les alertes quotidiennes sur ce symbole.
 """
-from psycopg2.extras import execute_values
 
 from config.db import get_connection
 from config.symbols import SYMBOLS
 
 
-def get_latest_prediction(symbol):
-    """
-    Récupère la dernière prédiction disponible pour un symbole.
-
-    Args:
-        symbol (str):
-            Symbole crypto concerné.
-
-    Returns:
-        tuple | None:
-            Dernière prédiction trouvée ou None.
-    """
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT
-            id,
-            symbol,
-            prediction_datetime,
-            predicted_change_24h,
-            trend
-        FROM predictions
-        WHERE symbol = %s
-        ORDER BY created_at DESC
-        LIMIT 1;
-    """, (symbol,))
-
-    prediction = cur.fetchone()
-
-    cur.close()
-    conn.close()
-
-    return prediction
-
-
-def get_users_with_daily_alert_enabled(symbol):
-    """
-    Récupère les utilisateurs ayant activé les alertes
-    quotidiennes pour un symbole donné.
-
-    Args:
-        symbol (str):
-            Symbole crypto concerné.
-
-    Returns:
-        list[tuple]:
-            Liste des utilisateurs éligibles.
-    """
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT
-            u.id,
-            u.email
-        FROM users u
-        JOIN daily_alert_preferences d
-            ON u.id = d.user_id
-        WHERE d.symbol = %s
-        AND d.enabled = TRUE
-        AND u.is_active = TRUE;
-    """, (symbol,))
-
-    users = cur.fetchall()
-
-    cur.close()
-    conn.close()
-
-    return users
-
-
-def save_notifications(notifications):
-    """
-    Sauvegarde une liste de notifications dans PostgreSQL.
-
-    Les doublons sont évités grâce à la contrainte :
-
-        (user_id, prediction_id, notification_type)
-
-    Args:
-        notifications (list):
-            Notifications à enregistrer.
-
-    Returns:
-        None
-    """
-    if not notifications:
-        return
-
-    conn = get_connection()
-    cur = conn.cursor()
-
-    execute_values(
-        cur,
-        """
-        INSERT INTO notifications (
-            user_id,
-            prediction_id,
-            symbol,
-            notification_type,
-            message,
-            status,
-            sent_at
-        )
-        VALUES %s
-        ON CONFLICT (user_id, prediction_id, notification_type)
-        DO NOTHING;
-        """,
-        notifications,
-    )
-
-    conn.commit()
-    cur.close()
-    conn.close()
-
-
 def generate_daily_notifications(symbol):
     """
-    Génère les notifications quotidiennes pour un symbole.
+    Génère les notifications quotidiennes pour un symbole donné.
 
-    Étapes :
-    - récupération de la dernière prédiction ;
-    - récupération des utilisateurs abonnés ;
-    - génération du message ;
-    - insertion des notifications en base.
+    La logique est entièrement déléguée à PostgreSQL :
+    - récupération de la dernière prédiction du symbole ;
+    - sélection des utilisateurs actifs abonnés ;
+    - insertion des notifications ;
+    - prévention des doublons avec ON CONFLICT DO NOTHING.
 
     Args:
-        symbol (str):
-            Symbole crypto concerné.
+        symbol (str): symbole crypto, par exemple "BTC/USDT".
 
     Returns:
-        None
+        int: nombre de notifications créées.
     """
-    prediction = get_latest_prediction(symbol)
+    conn = get_connection()
+    cur = conn.cursor()
 
-    if prediction is None:
-        print(f"Aucune prédiction trouvée pour {symbol}")
-        return
-
-    prediction_id, symbol, prediction_datetime, predicted_change, trend = prediction
-
-    users = get_users_with_daily_alert_enabled(symbol)
-
-    if not users:
-        print(f"Aucun utilisateur avec alerte activée pour {symbol}")
-        return
-
-    # Message générique envoyé à tous les utilisateurs
-    # abonnés à ce symbole.
-    message = (
-        f"Prévision quotidienne {symbol} : "
-        f"{predicted_change:.2f}% sur 24h. "
-        f"Tendance : {trend}. "
-        f"Référence : {prediction_datetime}."
-    )
-
-    notifications = []
-
-    # email est gardé pour un éventuel service d'envoi
-    for user_id, email in users:
-        notifications.append(
-            (
+    try:
+        cur.execute("""
+            WITH latest_prediction AS (
+                SELECT
+                    id,
+                    symbol,
+                    prediction_datetime,
+                    predicted_change_24h,
+                    trend
+                FROM predictions
+                WHERE symbol = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+            )
+            INSERT INTO notifications (
                 user_id,
                 prediction_id,
+                price_alert_id,
                 symbol,
-                "daily_prediction",
+                notification_type,
                 message,
-                "pending",
-                None,
+                status,
+                sent_at
             )
-        )
+            SELECT
+                u.id,
+                lp.id,
+                NULL,
+                lp.symbol,
+                'daily_prediction',
+                CONCAT(
+                    'Prévision quotidienne ', lp.symbol,
+                    ' : ',
+                    ROUND(lp.predicted_change_24h::numeric, 2),
+                    '%% sur 24h. Tendance : ',
+                    lp.trend,
+                    '. Référence : ',
+                    lp.prediction_datetime,
+                    '.'
+                ),
+                'pending',
+                NULL
+            FROM latest_prediction lp
+            JOIN daily_alert_preferences d
+                ON d.symbol = lp.symbol
+            JOIN users u
+                ON u.id = d.user_id
+            WHERE d.enabled = TRUE
+              AND u.is_active = TRUE
+            ON CONFLICT DO NOTHING;
+        """, (symbol,))
 
-    # Les notifications sont créées avec le statut "pending".
-    # Un futur service d'envoi pourra les traiter et les marquer
-    # comme "sent" après livraison.
-    save_notifications(notifications)
+        inserted_count = cur.rowcount
+        conn.commit()
 
-    print(
-        f"{symbol} : {len(notifications)} notifications quotidiennes générées."
-    )
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cur.close()
+        conn.close()
+
+    print(f"{symbol} : {inserted_count} notifications quotidiennes créées.")
+    return inserted_count
 
 
 def main():
-    """
-    Génère les notifications pour tous les symboles configurés.
-    """
-    for symbol in SYMBOLS:
-        generate_daily_notifications(symbol)
+    total_created = 0
 
-    print("Génération des notifications terminée.")
+    for symbol in SYMBOLS:
+        total_created += generate_daily_notifications(symbol)
+
+    print(
+        f"Génération terminée. "
+        f"Total notifications quotidiennes créées : {total_created}"
+    )
 
 
 if __name__ == "__main__":
