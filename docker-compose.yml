@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -68,6 +68,21 @@ services:
     volumes:
       - .:/app
     command: python run_pipeline.py
+    profiles:
+      - manual
+
+  dbt:
+    build: .
+    container_name: crypto_dbt
+    env_file:
+      - .env.docker
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+      - ./dbt/profiles.yml.example:/root/.dbt/profiles.yml
+    working_dir: /app/dbt
+    command: dbt run
     profiles:
       - manual
 

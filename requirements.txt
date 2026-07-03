@@ -13,3 +13,5 @@ prometheus-fastapi-instrumentator
 streamlit-autorefresh
 websocket
 Faker
+dbt-core
+dbt-postgres

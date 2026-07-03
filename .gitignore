@@ -217,3 +217,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Dbt 
+dbt/target/
+dbt/logs/
+target/
+logs/
+
+# PKL
+models/*.pkl
+models/archive/
+
+# Airflow
+airflow/logs/
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/

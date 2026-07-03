@@ -32,27 +32,27 @@ CRYPTO_CONFIG = {
     "ETH/USDT": {
         "reference_price": 3500,
         "hype": 85,
-    },
-    "SOL/USDT": {
-        "reference_price": 180,
-        "hype": 70,
-    },
-    "BNB/USDT": {
-        "reference_price": 590,
-        "hype": 45,
-    },
-    "XRP/USDT": {
-        "reference_price": 0.55,
-        "hype": 55,
-    },
-    "ADA/USDT": {
-        "reference_price": 0.42,
-        "hype": 35,
-    },
-    "DOGE/USDT": {
-        "reference_price": 0.12,
-        "hype": 60,
-    },
+    }
+    #"SOL/USDT": {
+    #    "reference_price": 180,
+    #    "hype": 70,
+    #},
+    #"BNB/USDT": {
+    #    "reference_price": 590,
+    #    "hype": 45,
+    #},
+    #"XRP/USDT": {
+    #    "reference_price": 0.55,
+    #    "hype": 55,
+    #},
+    #"ADA/USDT": {
+    #    "reference_price": 0.42,
+    #    "hype": 35,
+    #},
+    #"DOGE/USDT": {
+    #    "reference_price": 0.12,
+    #    "hype": 60,
+    #},
 }
 
 SYMBOLS = list(CRYPTO_CONFIG.keys())
