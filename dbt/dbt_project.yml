@@ -1,0 +1,17 @@
+name: crypto_alerts
+version: "1.0.0"
+config-version: 2
+
+profile: crypto_alerts
+
+model-paths: ["models"]
+
+models:
+  crypto_alerts:
+    staging:
+      +materialized: view
+      +schema: staging
+
+    marts:
+      +materialized: view
+      +schema: marts

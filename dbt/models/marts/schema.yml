@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: mart_users_by_country
+    description: "Aggregated users by country for Tableau dashboards."
+
+  - name: mart_notifications_by_type
+    description: "Notification statistics by type, status and symbol."
+
+  - name: mart_predictions_latest
+    description: "Latest ML prediction available for each symbol."
+
+  - name: mart_price_alerts_status
+    description: "Price alert distribution by symbol, direction and active status."
+
+  - name: mart_model_metrics_latest
+    description: "Latest model metrics for each cryptocurrency."

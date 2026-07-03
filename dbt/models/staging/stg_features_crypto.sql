@@ -1,0 +1,21 @@
+SELECT
+    id AS feature_id,
+    symbol,
+    timestamp,
+    datetime,
+    timeframe,
+    open,
+    high,
+    low,
+    close,
+    volume,
+    return_1h,
+    return_6h,
+    return_24h,
+    ema_20,
+    ema_50,
+    rsi_14,
+    volatility_24h,
+    volume_ratio,
+    target_24h_percent
+FROM public.features_crypto

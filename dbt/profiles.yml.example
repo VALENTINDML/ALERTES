@@ -1,0 +1,12 @@
+crypto_alerts:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: db
+      user: postgres
+      password: postgres
+      port: 5432
+      dbname: crypto_db
+      schema: public
+      threads: 4
