@@ -1,14 +1,26 @@
+from datetime import datetime, timedelta
+
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
-from datetime import datetime
+
+default_args = {
+    "owner": "crypto-alerts",
+    "depends_on_past": False,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+}
 
 
 with DAG(
     dag_id="crypto_training_pipeline",
+    description="Collecte les données marché, calcule les features et réentraîne les modèles ML.",
+    default_args=default_args,
     start_date=datetime(2025, 1, 1),
-    schedule="@daily", # None , 
+    schedule="@daily",
     catchup=False,
+    max_active_runs=1,
+    tags=["crypto", "training", "ml", "data-engineering"],
 ) as dag:
 
     collect = BashOperator(
