@@ -87,54 +87,6 @@ def build_features(df):
     return df
 
 
-def init_db():
-    """
-    Crée la table features_crypto si elle n'existe pas.
-
-    Cette table stocke les données OHLCV enrichies avec les features
-    calculées et la cible du modèle.
-    """
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS features_crypto (
-            id SERIAL PRIMARY KEY,
-            symbol TEXT NOT NULL,
-            timestamp BIGINT NOT NULL,
-            datetime TIMESTAMP NOT NULL,
-            timeframe TEXT NOT NULL,
-
-            open DOUBLE PRECISION NOT NULL,
-            high DOUBLE PRECISION NOT NULL,
-            low DOUBLE PRECISION NOT NULL,
-            close DOUBLE PRECISION NOT NULL,
-            volume DOUBLE PRECISION NOT NULL,
-
-            return_1h DOUBLE PRECISION NOT NULL,
-            return_6h DOUBLE PRECISION NOT NULL,
-            return_24h DOUBLE PRECISION NOT NULL,
-            ema_20 DOUBLE PRECISION NOT NULL,
-            ema_50 DOUBLE PRECISION NOT NULL,
-            rsi_14 DOUBLE PRECISION NOT NULL,
-            volatility_24h DOUBLE PRECISION NOT NULL,
-            volume_ratio DOUBLE PRECISION NOT NULL,
-            target_24h_percent DOUBLE PRECISION NOT NULL,
-
-            UNIQUE(symbol, timestamp, timeframe)
-        );
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_features_crypto_symbol_timestamp
-        ON features_crypto(symbol, timestamp);
-    """)
-
-    conn.commit()
-    cur.close()
-    conn.close()
-
-
 def save_features(df):
     """
     Sauvegarde les features calculées dans PostgreSQL.
@@ -223,7 +175,6 @@ def main():
     - calcule les features ;
     - sauvegarde les résultats dans features_crypto.
     """
-    init_db()
 
     for symbol in SYMBOLS:
         print(f"Création des features pour {symbol}...")

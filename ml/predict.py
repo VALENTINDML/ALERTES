@@ -31,34 +31,6 @@ FEATURES = [
 MODELS_DIR = "models"
 
 
-def init_db():
-    """
-    Crée la table predictions si elle n'existe pas encore.
-
-    La contrainte UNIQUE(symbol, prediction_datetime) évite de créer
-    plusieurs prédictions pour une même paire et une même date de référence.
-    """
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS predictions (
-            id SERIAL PRIMARY KEY,
-            symbol TEXT NOT NULL,
-            prediction_datetime TIMESTAMP NOT NULL,
-            predicted_change_24h DOUBLE PRECISION NOT NULL,
-            trend TEXT NOT NULL,
-            model_path TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(symbol, prediction_datetime)
-        );
-    """)
-
-    conn.commit()
-    cur.close()
-    conn.close()
-
-
 def load_latest_features(symbol):
     """
     Charge la dernière ligne de features disponible pour un symbole.
@@ -229,7 +201,6 @@ def main():
     """
     Lance la prédiction pour tous les symboles configurés.
     """
-    init_db()
 
     for symbol in SYMBOLS:
         predict_symbol(symbol)

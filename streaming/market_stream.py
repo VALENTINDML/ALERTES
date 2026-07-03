@@ -24,33 +24,6 @@ def get_project_symbol(binance_symbol):
     return None
 
 
-def init_live_market_table():
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS live_market_data (
-            id SERIAL PRIMARY KEY,
-            symbol TEXT NOT NULL,
-            timestamp BIGINT NOT NULL,
-            datetime TIMESTAMP NOT NULL,
-            timeframe TEXT NOT NULL,
-            open DOUBLE PRECISION NOT NULL,
-            high DOUBLE PRECISION NOT NULL,
-            low DOUBLE PRECISION NOT NULL,
-            close DOUBLE PRECISION NOT NULL,
-            volume DOUBLE PRECISION NOT NULL,
-            is_closed BOOLEAN NOT NULL,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(symbol, timeframe)
-        );
-    """)
-
-    conn.commit()
-    cur.close()
-    conn.close()
-
-
 def save_live_candle(symbol, kline):
     conn = get_connection()
     cur = conn.cursor()
@@ -105,7 +78,6 @@ def save_live_candle(symbol, kline):
 
 
 async def listen_market_stream():
-    init_live_market_table()
 
     streams = "/".join(
         f"{normalize_symbol(symbol)}@kline_{TIMEFRAME}"

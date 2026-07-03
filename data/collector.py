@@ -19,40 +19,6 @@ from config.config_db import TIMEFRAME, DAYS_HISTORY
 from config.symbols import SYMBOLS 
 from config.db import get_connection
 
-def init_db():
-    """
-    Crée la table ccxt_ohlcv si elle n'existe pas encore.
-
-    La table stocke les bougies OHLCV récupérées depuis CCXT.
-    Une contrainte UNIQUE empêche l'insertion de doublons pour une même
-    paire, un même timestamp et un même timeframe.
-    """
-    conn=get_connection()
-    cur=conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS ccxt_ohlcv (
-            id SERIAL PRIMARY KEY,
-            symbol TEXT NOT NULL,
-            timestamp BIGINT NOT NULL,
-            datetime TIMESTAMP NOT NULL,
-            timeframe TEXT NOT NULL,
-            open DOUBLE PRECISION NOT NULL,
-            high DOUBLE PRECISION NOT NULL,
-            low DOUBLE PRECISION NOT NULL,
-            close DOUBLE PRECISION NOT NULL,
-            volume DOUBLE PRECISION NOT NULL,
-            UNIQUE(symbol, timestamp, timeframe)
-        );
-    """)
-
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_ccxt_ohlcv_symbol_timestamp
-        ON ccxt_ohlcv(symbol, timestamp);
-    """)
-
-    conn.commit()
-    cur.close()
-    conn.close()
 
 def fetch_ohlcv_history(exchange, symbol: str):
     """
@@ -168,7 +134,6 @@ def main():
     récupère les bougies pour chaque symbole configuré, puis sauvegarde
     les données en base.
     """
-    init_db()
 
     exchange = ccxt.binance({
         "enableRateLimit": True,
