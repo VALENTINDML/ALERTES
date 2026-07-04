@@ -1,3 +1,7 @@
+# Documentation des modèles métier (marts).
+#
+# Les marts sont destinés à la consommation par les dashboards,
+# les APIs ou les outils de Business Intelligence (Tableau, Power BI...).
 version: 2
 
 models:

@@ -16,7 +16,8 @@ from config.symbols import SYMBOLS
 from config.db import get_connection
 from alerts.generate_notifications import generate_daily_notifications
 
-
+# Liste des features attendues par les modèles entraînés.
+# Elle doit rester cohérente avec train_model.py.
 FEATURES = [
     "return_1h",
     "return_6h",
@@ -63,7 +64,8 @@ def load_latest_features(symbol):
 
     return df
 
-
+# Seuils simples pour transformer une prédiction numérique
+# en signal métier lisible par l'utilisateur.
 def classify_trend(predicted_change):
     """
     Convertit une variation prédite en tendance lisible.

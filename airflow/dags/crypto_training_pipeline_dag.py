@@ -1,9 +1,21 @@
+"""
+DAG d'entraînement quotidien.
+
+Chaque exécution réalise les étapes suivantes :
+- collecte des nouvelles données de marché ;
+- recalcul des features ;
+- réentraînement des modèles de Machine Learning.
+
+Les nouveaux modèles ne remplacent les modèles actifs que si leurs
+performances sont meilleures sur le jeu de test.
+"""
 from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
-
+# Paramètres communs à toutes les tâches du DAG.
+# Deux tentatives sont effectuées en cas d'échec d'une tâche.
 default_args = {
     "owner": "crypto-alerts",
     "depends_on_past": False,

@@ -55,6 +55,8 @@ def build_features(df):
         pd.DataFrame:
             DataFrame enrichi avec les features et la cible.
     """
+
+    # Tri chronologique indispensable avant les pct_change, rolling et shift.
     df = df.sort_values("datetime").copy()
 
     # Variations passées du prix.
@@ -128,6 +130,7 @@ def save_features(df):
         for row in df.itertuples(index=False)
     ]
 
+    # Insertion batch pour sauvegarder efficacement plusieurs lignes de features.
     execute_values(
         cur,
         """
@@ -179,6 +182,7 @@ def main():
     for symbol in SYMBOLS:
         print(f"Création des features pour {symbol}...")
 
+        # Les features sont recalculées symbole par symbole pour isoler les séries temporelles.
         query = """
             SELECT *
             FROM ccxt_ohlcv

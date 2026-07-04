@@ -1,9 +1,20 @@
+"""
+DAG de premier lancement du projet.
+
+Ce pipeline est exécuté une seule fois lors de l'initialisation
+de l'application afin de préparer l'ensemble de la chaîne ML :
+- collecte des données historiques ;
+- calcul des features ;
+- entraînement des modèles ;
+- génération des premières prédictions.
+"""
 from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
-
+# Paramètres communs à toutes les tâches du DAG.
+# En cas d'échec, Airflow tentera automatiquement une nouvelle exécution.
 default_args = {
     "owner": "crypto-alerts",
     "depends_on_past": False,

@@ -1,4 +1,17 @@
+# Architecture Docker du projet Crypto Alerts.
+#
+# Les services couvrent l'ensemble de la chaîne Data :
+# - collecte des données ;
+# - stockage PostgreSQL ;
+# - transformation (dbt) ;
+# - entraînement et prédiction ML ;
+# - API FastAPI ;
+# - dashboard Streamlit ;
+# - orchestration Airflow ;
+# - supervision Prometheus + Grafana + cAdvisor.
 services:
+  # Base PostgreSQL principale contenant :
+  # utilisateurs, données de marché, features, prédictions et notifications.
   db:
     image: postgres:16
     container_name: crypto_postgres
@@ -11,6 +24,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # Interface d'administration PostgreSQL.
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: crypto_pgadmin
@@ -22,6 +36,7 @@ services:
     depends_on:
       - db
 
+  # Base PostgreSQL dédiée à Airflow.
   airflow-db:
     image: postgres:16
     container_name: airflow_postgres
@@ -31,7 +46,9 @@ services:
       POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD}
     volumes:
       - airflow_postgres_data:/var/lib/postgresql/data
-      
+
+  # API REST FastAPI exposant les données du projet
+  # ainsi que les métriques Prometheus.   
   api:
     build: .
     container_name: crypto_api
@@ -45,6 +62,7 @@ services:
       - .:/app
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000
 
+  # Dashboard Streamlit de visualisation.
   dashboard:
     build: .
     container_name: crypto_dashboard
@@ -58,6 +76,8 @@ services:
       - .:/app
     command: streamlit run dashboard/dashboard.py --server.address=0.0.0.0 --server.port=8501
 
+  # Pipeline complet exécuté manuellement
+  # (collecte → features → entraînement → prédiction).
   pipeline:
     build: .
     container_name: crypto_pipeline
@@ -71,6 +91,7 @@ services:
     profiles:
       - manual
 
+  # Exécution manuelle des transformations dbt.
   dbt:
     build: .
     container_name: crypto_dbt
@@ -86,6 +107,8 @@ services:
     profiles:
       - manual
 
+  # Initialise Airflow :
+  # migration de la base et création du compte administrateur.
   airflow-init:
     build:
       context: .
@@ -115,6 +138,7 @@ services:
       --email ${AIRFLOW_ADMIN_EMAIL} || true
       "
 
+  # Interface web Airflow.
   airflow-webserver:
     build:
       context: .
@@ -137,6 +161,7 @@ services:
       - airflow_logs:/opt/airflow/logs
     command: airflow webserver
 
+  # Orchestrateur exécutant les DAGs planifiés.
   airflow-scheduler:
     build:
       context: .
@@ -157,6 +182,7 @@ services:
       - airflow_logs:/opt/airflow/logs
     command: airflow scheduler
 
+  # Collecte les métriques exposées par les services.
   prometheus:
     image: prom/prometheus:latest
     container_name: crypto_prometheus
@@ -168,31 +194,40 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
 
+  # Dashboard de supervision connecté à Prometheus.
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.5.2
     container_name: crypto_grafana
     ports:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
 
+  # Expose les métriques CPU, RAM et ressources des conteneurs Docker.
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: crypto_cadvisor
     ports:
       - "8081:8080"
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
     volumes:
       - /:/rootfs:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /var/lib/containerd:/var/lib/containerd:ro
     command:
       - "--docker_only=true"
       - "--housekeeping_interval=10s"
 
+  # Stream temps réel chargé de déclencher les alertes de prix.
   price-alert-stream:
     build: .
     container_name: crypto_price_alert_stream
@@ -204,6 +239,7 @@ services:
       - .:/app
     command: python streaming/price_alert_stream.py
 
+  # Stream temps réel mettant à jour les dernières bougies de marché.
   market-stream:
     build: .
     container_name: crypto_market_stream
@@ -215,6 +251,7 @@ services:
       - .:/app
     command: python streaming/market_stream.py
 
+# Volumes persistants utilisés par les différents services.
 volumes:
   postgres_data:
   airflow_postgres_data:

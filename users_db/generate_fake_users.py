@@ -32,6 +32,8 @@ DEFAULT_TOTAL_USERS = 1000
 # Cela évite un résultat trop proche de 50/50.
 DAILY_ALERT_BASE_RATE = random.uniform(0.25, 0.85)
 
+# Données géographiques fictives utilisées pour générer
+# des profils utilisateurs réalistes par pays.
 COUNTRIES = {
     "FR": {
         "country": "France",
@@ -135,7 +137,8 @@ COUNTRIES = {
     },
 }
 
-
+# Génère une pondération aléatoire des pays à chaque exécution.
+# Cela évite une répartition parfaitement uniforme entre pays.
 def generate_country_weights():
     return {
         country_code: random.randint(20, 100)
@@ -159,7 +162,8 @@ def get_total_users_to_generate():
 
     return DEFAULT_TOTAL_USERS
 
-
+# Permet de générer des emails uniques même si le script est relancé
+# plusieurs fois sur une base déjà alimentée.
 def get_next_user_index():
     conn = get_connection()
     cur = conn.cursor()
@@ -184,7 +188,8 @@ def choose_country_code():
         k=1,
     )[0]
 
-
+# Normalise les caractères spéciaux afin de produire
+# des emails simples et compatibles.
 def normalize_email(value):
     value = value.lower()
     value = value.replace(" ", "")
@@ -376,7 +381,8 @@ def save_users(users):
 
     return [row[0] for row in inserted_rows]
 
-
+# La majorité des utilisateurs possèdent peu de cryptos,
+# ce qui simule un comportement utilisateur plus réaliste.
 def get_total_positions_for_user():
     return random.choices(
         [1, 2, 3, 4, 5],
@@ -384,7 +390,8 @@ def get_total_positions_for_user():
         k=1,
     )[0]
 
-
+# Un utilisateur peut acheter plusieurs fois la même crypto.
+# Chaque achat devient une position distincte.
 def get_total_buys_for_symbol():
     return random.choices(
         [1, 2, 3],
@@ -392,7 +399,8 @@ def get_total_buys_for_symbol():
         k=1,
     )[0]
 
-
+# Le prix d'achat est généré autour du prix de référence
+# pour simuler des achats passés à différents niveaux de marché.
 def generate_positions(user_ids):
     conn = get_connection()
     cur = conn.cursor()
@@ -523,6 +531,8 @@ def generate_price_alerts(user_ids):
     for user_id, symbol, buy_price in positions:
         hype = get_symbol_hype(symbol)
 
+        # Plus une crypto est populaire, plus elle a de chances
+        # de générer une alerte personnalisée.
         create_alert_probability = min(0.35 + (hype / 200), 0.9)
 
         if random.random() > create_alert_probability:

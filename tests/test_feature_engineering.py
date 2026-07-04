@@ -4,6 +4,15 @@ from data.feature_engineering import compute_rsi, build_features
 
 
 def make_ohlcv_dataframe(total_rows=80):
+    """
+    Génère un jeu de bougies OHLCV fictif et déterministe.
+
+    80 lignes permettent d'avoir assez d'historique pour calculer :
+    - les rolling windows ;
+    - le RSI ;
+    - la volatilité 24h ;
+    - la cible décalée à +24h.
+    """
     rows = []
 
     for i in range(total_rows):
@@ -25,6 +34,10 @@ def make_ohlcv_dataframe(total_rows=80):
 
 
 def test_compute_rsi_returns_series():
+    """
+    Vérifie que le calcul du RSI conserve la structure attendue :
+    une Series Pandas de même longueur que les prix d'entrée.
+    """
     close = pd.Series([100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114])
 
     rsi = compute_rsi(close, period=14)
@@ -34,6 +47,10 @@ def test_compute_rsi_returns_series():
 
 
 def test_build_features_creates_expected_columns():
+    """
+    Vérifie que toutes les colonnes nécessaires au modèle ML
+    sont bien générées par le feature engineering.
+    """
     df = make_ohlcv_dataframe()
 
     features_df = build_features(df)
@@ -54,6 +71,10 @@ def test_build_features_creates_expected_columns():
 
 
 def test_build_features_removes_missing_values():
+    """
+    Vérifie que les lignes incomplètes créées par les rolling windows
+    et le shift de la cible sont bien supprimées.
+    """
     df = make_ohlcv_dataframe()
 
     features_df = build_features(df)
@@ -63,6 +84,10 @@ def test_build_features_removes_missing_values():
 
 
 def test_target_24h_percent_is_correct():
+    """
+    Vérifie que la cible ML correspond bien à la variation future
+    du prix de clôture à horizon 24h.
+    """
     df = make_ohlcv_dataframe()
 
     features_df = build_features(df)

@@ -1,17 +1,22 @@
+# Configuration générale du projet dbt.
 name: crypto_alerts
 version: "1.0.0"
 config-version: 2
 
+# Profil de connexion PostgreSQL utilisé par dbt.
 profile: crypto_alerts
 
+# Répertoire contenant les modèles SQL.
 model-paths: ["models"]
 
 models:
   crypto_alerts:
+    # Modèles intermédiaires servant à préparer et nettoyer les données.
     staging:
       +materialized: view
       +schema: staging
 
+    # Modèles métier destinés à être consommés par les applications.
     marts:
       +materialized: view
       +schema: marts

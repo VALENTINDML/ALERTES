@@ -1,3 +1,13 @@
+"""
+Streaming temps réel des alertes de prix.
+
+Ce service écoute les trades Binance en WebSocket pour chaque symbole
+configuré, puis déclenche les alertes de prix personnalisées lorsque
+le prix courant atteint l'objectif défini par l'utilisateur.
+
+Le traitement est volontairement SQL-first afin d'éviter de charger
+des millions d'alertes actives en mémoire Python.
+"""
 import asyncio
 import json
 import time
@@ -10,7 +20,12 @@ from config.symbols import SYMBOLS
 
 BINANCE_WS_URL = "wss://stream.binance.com:9443/stream?streams="
 
+# Nombre maximal d'alertes traitées par transaction SQL.
+# Le batch évite les transactions trop longues sur de gros volumes.
 BATCH_SIZE = 5000
+# Limite la fréquence de traitement par symbole.
+# Binance envoie beaucoup de trades ; on évite de requêter PostgreSQL
+# à chaque tick de marché.
 PRICE_PROCESS_INTERVAL_SECONDS = 1.0
 
 last_processed_at = {}
@@ -28,6 +43,12 @@ def get_project_symbol(binance_symbol):
 
 
 def should_process_symbol(symbol):
+    """
+    Détermine si le symbole peut être traité maintenant.
+
+    Cela agit comme un throttling par crypto afin de réduire
+    la pression sur PostgreSQL.
+    """
     now = time.time()
     previous = last_processed_at.get(symbol, 0)
 
@@ -147,6 +168,9 @@ def process_triggered_alerts_batch(symbol, current_price):
 
 
 def process_price_event(symbol, current_price):
+    # Continue de traiter les alertes par lots tant que le dernier batch
+    # a atteint la taille maximale. Cela signifie qu'il reste potentiellement
+    # d'autres alertes déclenchées à traiter.
     total_triggered = 0
     total_inserted = 0
     total_updated = 0
@@ -171,6 +195,12 @@ def process_price_event(symbol, current_price):
 
 
 async def listen_price_stream():
+    """
+    Écoute les trades Binance en temps réel pour toutes les cryptos suivies.
+
+    Le flux est multiplexé : une seule connexion WebSocket permet
+    de recevoir les trades de tous les symboles configurés.
+    """
     streams = "/".join(
         f"{normalize_symbol(symbol)}@trade"
         for symbol in SYMBOLS

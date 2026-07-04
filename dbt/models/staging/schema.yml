@@ -1,3 +1,9 @@
+# Documentation et tests de qualité des modèles staging.
+#
+# Les tests dbt vérifient automatiquement :
+# - l'unicité des identifiants ;
+# - l'absence de valeurs nulles ;
+# - la validité de certaines valeurs métier.
 version: 2
 
 models:

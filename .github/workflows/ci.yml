@@ -1,5 +1,5 @@
 name: CI
-
+# Déclenche la pipeline à chaque push ou Pull Request sur la branche principale.
 on:
   push:
     branches:
@@ -9,43 +9,46 @@ on:
       - main
 
 jobs:
+  # Vérification automatique du projet Python.
   python-check:
     runs-on: ubuntu-latest
-
+    # Variables d'environnement nécessaires aux tests.
     env:
       PYTHONPATH: ${{ github.workspace }}
       TIMEFRAME: 1h
       DAYS_HISTORY: 180
 
     steps:
+      # Récupère le code du dépôt.
       - name: Checkout code
         uses: actions/checkout@v4
-
+      # Installe la version de Python utilisée par le projet.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+      # Installe les dépendances Python.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
+      # Exécute les tests unitaires Pytest.
       - name: Run Pytest
         run: |
           pytest tests/
-
+      # Vérifie que tous les fichiers Python compilent correctement.
       - name: Check Python syntax
         run: |
           python -m compileall .
-
+  # Vérifie que toutes les images Docker peuvent être construites.
   docker-build:
     runs-on: ubuntu-latest
 
     steps:
+      # Récupère le code du dépôt.
       - name: Checkout code
         uses: actions/checkout@v4
-
+      # Vérifie que le docker-compose est valide en construisant les images.
       - name: Build Docker images
         run: |
           docker compose build

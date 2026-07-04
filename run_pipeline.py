@@ -1,14 +1,21 @@
 """
-Orchestration du pipeline quotidien.
+Pipeline manuel d'exécution.
 
-Ce script exécute les étapes principales du projet dans l'ordre :
+Ce script permet d'exécuter manuellement l'ensemble de la chaîne
+de traitement sans passer par Airflow.
 
+Étapes exécutées :
 1. Collecte des données OHLCV
 2. Feature engineering
 3. Entraînement du modèle
 4. Prédiction et génération des notifications
 
-À terme, cette orchestration pourra être remplacée par Airflow.
+Il est principalement utilisé pour :
+- les tests locaux ;
+- le débogage ;
+- les exécutions ponctuelles.
+
+En production, cette orchestration est assurée par les DAGs Airflow.
 """
 import subprocess
 from datetime import datetime

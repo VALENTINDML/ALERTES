@@ -24,7 +24,8 @@ from config.symbols import SYMBOLS
 from config.db import get_connection
 from config.config_db import DAYS_HISTORY
 
-
+# Features utilisées à l'entraînement.
+# Cette liste doit rester strictement identique à celle utilisée dans predict.py.
 FEATURES = [
     "return_1h",
     "return_6h",
@@ -36,6 +37,7 @@ FEATURES = [
     "volume_ratio",
 ]
 
+# Variable cible : variation future du prix à horizon 24h.
 TARGET = "target_24h_percent"
 
 MODELS_DIR = "models"
@@ -208,6 +210,8 @@ def train_symbol_model(symbol):
 
     print(df[TARGET].describe())
 
+    # Split chronologique : on évite le shuffle pour respecter l'ordre temporel
+    # des données financières et limiter le risque de data leakage.
     X = df[FEATURES]
     y = df[TARGET]
 
@@ -223,6 +227,8 @@ def train_symbol_model(symbol):
         print(f"Split train/test invalide pour {symbol}")
         return
 
+    # Modèle robuste et simple à maintenir pour une première version.
+    # n_jobs=-1 permet d'utiliser tous les cœurs CPU disponibles.
     model = RandomForestRegressor(
         n_estimators=300,
         random_state=42,
@@ -263,6 +269,8 @@ def train_symbol_model(symbol):
         print(f"MAPE : {old_metrics['mape']:.2f}%")
         print(f"R2   : {old_metrics['r2']:.4f}")
 
+        # Le nouveau modèle est accepté uniquement s'il améliore le RMSE,
+        # puis le MAE en cas d'égalité.
         should_save_new_model = is_new_model_better(
             old_metrics,
             new_metrics,

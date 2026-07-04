@@ -112,6 +112,8 @@ def init_users_db():
         );
     """)
 
+    # Historique des performances des modèles de Machine Learning.
+    # Une ligne est ajoutée à chaque entraînement accepté.
     cur.execute("""
         CREATE TABLE IF NOT EXISTS model_metrics (
             id BIGSERIAL PRIMARY KEY,
@@ -123,6 +125,9 @@ def init_users_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
             );
     """)
+
+    # Historique des bougies OHLCV collectées depuis Binance.
+    # Cette table constitue la source de données brute du pipeline ML.
     cur.execute("""
         CREATE TABLE IF NOT EXISTS ccxt_ohlcv (
             id BIGSERIAL PRIMARY KEY,
@@ -139,6 +144,8 @@ def init_users_db():
         );
     """)
 
+    # Données enrichies utilisées pour l'entraînement
+    # et les prédictions des modèles de Machine Learning.
     cur.execute("""
         CREATE TABLE IF NOT EXISTS features_crypto (
             id BIGSERIAL PRIMARY KEY,
@@ -167,6 +174,8 @@ def init_users_db():
         );
     """)
 
+    # Dernière bougie en temps réel maintenue par le WebSocket Binance.
+    # Cette table est utilisée par l'API et le dashboard Streamlit.
     cur.execute("""
         CREATE TABLE IF NOT EXISTS live_market_data (
             id BIGSERIAL PRIMARY KEY,
@@ -185,6 +194,12 @@ def init_users_db():
         );
     """)
 
+
+
+    # ------------------------------------------------------------------
+    # Création des index PostgreSQL
+    # Optimisation des performances de lecture.
+    # ------------------------------------------------------------------
 
     # Users
     cur.execute("""
@@ -225,6 +240,9 @@ def init_users_db():
         WHERE enabled = TRUE;
     """)
 
+    # Les index partiels permettent d'accélérer la recherche
+    # uniquement sur les alertes encore actives.
+
     # Price alerts
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_price_alerts_above_active
@@ -247,6 +265,9 @@ def init_users_db():
         CREATE INDEX IF NOT EXISTS idx_price_alerts_created_at
         ON price_alerts(created_at DESC);
     """)
+
+    # Empêche la génération de notifications en double
+    # pour une même prédiction ou une même alerte de prix.
 
     # Notifications
     cur.execute("""

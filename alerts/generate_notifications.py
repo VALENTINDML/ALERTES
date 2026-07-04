@@ -36,6 +36,8 @@ def generate_daily_notifications(symbol):
     conn = get_connection()
     cur = conn.cursor()
 
+    # CTE utilisée pour isoler la dernière prédiction du symbole
+    # et l'utiliser directement dans l'insertion des notifications.
     try:
         cur.execute("""
             WITH latest_prediction AS (

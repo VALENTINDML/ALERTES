@@ -36,11 +36,17 @@ def fetch_ohlcv_history(exchange, symbol: str):
             Chaque bougie contient :
             [timestamp, open, high, low, close, volume].
     """
+
+    # Point de départ de la collecte : on remonte sur DAYS_HISTORY jours
+    # à partir de l'heure actuelle.
     since=int(
         (datetime.now(timezone.utc) - timedelta(days=DAYS_HISTORY)).timestamp() * 1000
     )
 
     all_rows=[]
+
+    # Binance limite le nombre de bougies retournées par appel.
+    # On pagine donc les résultats jusqu'à récupérer tout l'historique demandé.
     limit=1000
 
     while True:
@@ -56,6 +62,8 @@ def fetch_ohlcv_history(exchange, symbol: str):
 
         all_rows.extend(candles)
 
+        # On avance le curseur juste après la dernière bougie reçue
+        # pour éviter de récupérer deux fois la même donnée.
         last_timestamp = candles[-1][0]
         since = last_timestamp + 1
 
@@ -102,6 +110,7 @@ def save_ohlcv(symbol: str, candles):
         for candle in candles
     ]
 
+    # Insertion batch pour éviter une requête SQL par bougie.
     execute_values(
         cur,
         """
@@ -130,9 +139,8 @@ def main():
     """
     Point d'entrée du script.
 
-    Initialise la table PostgreSQL, crée une instance Binance via CCXT,
-    récupère les bougies pour chaque symbole configuré, puis sauvegarde
-    les données en base.
+    Crée une instance Binance via CCXT, récupère les bougies
+    pour chaque symbole configuré, puis sauvegarde les données en base.
     """
 
     exchange = ccxt.binance({

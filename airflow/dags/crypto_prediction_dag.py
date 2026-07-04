@@ -1,9 +1,19 @@
+"""
+DAG de prédiction quotidienne.
+
+Chaque exécution réalise les étapes suivantes :
+- collecte des dernières données de marché ;
+- recalcul des features ;
+- application des modèles entraînés ;
+- génération des nouvelles prédictions et des notifications associées.
+"""
 from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
-
+# Paramètres communs à toutes les tâches du DAG.
+# Deux tentatives sont effectuées en cas d'échec d'une tâche.
 default_args = {
     "owner": "crypto-alerts",
     "depends_on_past": False,

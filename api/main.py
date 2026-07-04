@@ -23,13 +23,19 @@ app = FastAPI(
     version="1.1.0",
 )
 
+# Expose automatiquement les métriques Prometheus sur /metrics.
+# Ces métriques sont ensuite collectées par Prometheus et affichées dans Grafana.
 Instrumentator().instrument(app).expose(app)
 
+# Cache mémoire simple pour limiter les requêtes répétées sur les endpoints statistiques.
+# Suffisant pour un projet local / portfolio, mais à remplacer par Redis en production.
 CACHE = {}
 CACHE_TTL_SECONDS = 10
 
 
 def cached(key, ttl=CACHE_TTL_SECONDS):
+    # La clé de cache dépend du nom logique de l'endpoint
+    # ainsi que des arguments passés à la fonction.
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -49,7 +55,7 @@ def cached(key, ttl=CACHE_TTL_SECONDS):
 
     return decorator
 
-
+# Helper pour exécuter une requête SQL retournant une seule ligne.
 def fetch_one(query, params=None):
     conn = get_connection()
     cur = conn.cursor()
@@ -62,7 +68,7 @@ def fetch_one(query, params=None):
 
     return row
 
-
+# Helper pour exécuter une requête SQL retournant plusieurs lignes.
 def fetch_all(query, params=None):
     conn = get_connection()
     cur = conn.cursor()
