@@ -1,0 +1,127 @@
+{
+  "title": "Crypto Alerts Monitoring",
+  "uid": "crypto-alerts-monitoring",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Utilisation CPU (%)",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(container_cpu_system_seconds_total{job=\"cadvisor\", id=\"/\"}[5m]) * 100",
+          "legendFormat": "CPU global"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Utilisation mémoire (GiB)",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "container_memory_usage_bytes{job=\"cadvisor\", id=\"/\"}",
+          "legendFormat": "RAM globale"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Débit API (req/s)",
+      "gridPos": { "x": 0, "y": 8, "w": 8, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_duration_seconds_count{job=\"fastapi\", handler!=\"/metrics\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Temps de réponse moyen",
+      "gridPos": { "x": 8, "y": 8, "w": 8, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_duration_seconds_sum{job=\"fastapi\", handler!=\"/metrics\"}[5m])) / sum(rate(http_request_duration_seconds_count{job=\"fastapi\", handler!=\"/metrics\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 4
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Temps de réponse p95",
+      "gridPos": { "x": 16, "y": 8, "w": 8, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"fastapi\", handler!=\"/metrics\"}[5m])))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 4
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Requêtes API par endpoint",
+      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (handler, method) (rate(http_request_duration_seconds_count{job=\"fastapi\", handler!=\"/metrics\"}[5m]))",
+          "legendFormat": "{{method}} {{handler}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2
+          }
+        }
+      }
+    }
+  ]
+}
