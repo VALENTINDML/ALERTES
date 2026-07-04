@@ -19,5 +19,5 @@ DB_HOST=os.getenv("DB_HOST")
 DB_PORT=os.getenv("DB_PORT")
 
 # Configuration métier
-TIMEFRAME=os.getenv("TIMEFRAME")
-DAYS_HISTORY=int(os.getenv("DAYS_HISTORY"))
+TIMEFRAME=os.getenv("TIMEFRAME", "1h")
+DAYS_HISTORY=int(os.getenv("DAYS_HISTORY", "180"))

@@ -12,6 +12,11 @@ jobs:
   python-check:
     runs-on: ubuntu-latest
 
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      TIMEFRAME: 1h
+      DAYS_HISTORY: 180
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

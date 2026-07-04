@@ -15,4 +15,4 @@ websocket
 Faker
 dbt-core
 dbt-postgres
-httpx
+httpx2
