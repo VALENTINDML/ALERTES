@@ -6,6 +6,9 @@ Ce script ajoute des utilisateurs fictifs dans PostgreSQL, ainsi que :
 - leurs préférences d'alertes quotidiennes ;
 - leurs alertes de prix personnalisées.
 
+La génération est réalisée par batch afin de supporter plusieurs
+millions d'utilisateurs sans saturer la mémoire.
+
 La répartition des cryptos dépend du niveau de hype défini dans
 config/symbols.py.
 
@@ -17,6 +20,7 @@ Plus une crypto a un score de hype élevé, plus elle a de chances :
 
 import random
 import sys
+import time
 from datetime import datetime, timedelta
 
 from faker import Faker
@@ -27,6 +31,9 @@ from config.symbols import SYMBOLS, REFERENCE_PRICES, SYMBOL_HYPE
 
 
 DEFAULT_TOTAL_USERS = 1000
+
+BATCH_SIZE = 50000
+INSERT_PAGE_SIZE = 5000
 
 # Taux global aléatoire à chaque exécution.
 # Cela évite un résultat trop proche de 50/50.
@@ -299,10 +306,7 @@ def get_daily_alert_probability(symbol):
     return min(probability, 0.95)
 
 
-def generate_users(total_users):
-    start_index = get_next_user_index()
-    end_index = start_index + total_users
-
+def generate_users(start_index, end_index):
     users = []
 
     for i in range(start_index, end_index):
@@ -314,7 +318,6 @@ def generate_users(total_users):
 
         first_name = fake.first_name()
         last_name = fake.last_name()
-
         email_domain = random.choice(EMAIL_DOMAINS)
 
         email = normalize_email(
@@ -373,6 +376,7 @@ def save_users(users):
         """,
         users,
         fetch=True,
+        page_size=INSERT_PAGE_SIZE,
     )
 
     conn.commit()
@@ -460,6 +464,7 @@ def generate_positions(user_ids):
         VALUES %s;
         """,
         positions,
+        page_size=INSERT_PAGE_SIZE,
     )
 
     conn.commit()
@@ -472,11 +477,6 @@ def generate_alert_preferences(user_ids):
     cur = conn.cursor()
 
     preferences = []
-
-    print(
-        "Taux global d'activation des alertes quotidiennes : "
-        f"{DAILY_ALERT_BASE_RATE:.2%}"
-    )
 
     for user_id in user_ids:
         for symbol in SYMBOLS:
@@ -503,6 +503,7 @@ def generate_alert_preferences(user_ids):
         DO NOTHING;
         """,
         preferences,
+        page_size=INSERT_PAGE_SIZE,
     )
 
     conn.commit()
@@ -571,6 +572,7 @@ def generate_price_alerts(user_ids):
             VALUES %s;
             """,
             price_alerts,
+            page_size=INSERT_PAGE_SIZE,
         )
 
     conn.commit()
@@ -579,25 +581,72 @@ def generate_price_alerts(user_ids):
 
 
 def main():
+    start_time = time.perf_counter()
+
     total_users = get_total_users_to_generate()
+    current_index = get_next_user_index()
+    remaining_users = total_users
+    total_inserted = 0
+    batch_number = 1
 
     print("Répartition aléatoire des pays :", COUNTRY_WEIGHTS)
     print("Hype des cryptos :", SYMBOL_HYPE)
+    print(
+        "Taux global d'activation des alertes quotidiennes : "
+        f"{DAILY_ALERT_BASE_RATE:.2%}"
+    )
+    print(f"Nombre total d'utilisateurs à générer : {total_users}")
+    print(f"Taille des batchs : {BATCH_SIZE}")
 
-    users = generate_users(total_users)
+    while remaining_users > 0:
+        current_batch_size = min(BATCH_SIZE, remaining_users)
+        batch_start_index = current_index
+        batch_end_index = current_index + current_batch_size
 
-    new_user_ids = save_users(users)
+        print(
+            f"\nBatch {batch_number} - "
+            f"génération de {current_batch_size} utilisateurs"
+        )
 
-    if not new_user_ids:
-        print("Aucun nouvel utilisateur inséré.")
-        return
+        users = generate_users(
+            start_index=batch_start_index,
+            end_index=batch_end_index,
+        )
 
-    generate_positions(new_user_ids)
-    generate_alert_preferences(new_user_ids)
-    generate_price_alerts(new_user_ids)
+        new_user_ids = save_users(users)
 
-    print(f"{len(new_user_ids)} nouveaux utilisateurs générés.")
+        if not new_user_ids:
+            print("Aucun utilisateur inséré sur ce batch.")
+        else:
+            generate_positions(new_user_ids)
+            generate_alert_preferences(new_user_ids)
+            generate_price_alerts(new_user_ids)
 
+            total_inserted += len(new_user_ids)
+
+            print(
+                f"Batch {batch_number} terminé : "
+                f"{len(new_user_ids)} utilisateurs insérés "
+                f"({total_inserted}/{total_users})"
+            )
+
+        current_index += current_batch_size
+        remaining_users -= current_batch_size
+        batch_number += 1
+
+    print(f"\nGénération terminée : {total_inserted} utilisateurs insérés.")
+
+    end_time = time.perf_counter()
+    duration = int(end_time - start_time)
+
+    hours = duration // 3600
+    minutes = (duration % 3600) // 60
+    seconds = duration % 60
+
+    print(
+        f"\nTemps d'exécution : "
+        f"{hours} h {minutes} min {seconds} s"
+    )
 
 if __name__ == "__main__":
     main()
