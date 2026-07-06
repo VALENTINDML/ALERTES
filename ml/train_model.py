@@ -295,6 +295,14 @@ def train_symbol_model(symbol):
         print(f"Nouveau modèle accepté et sauvegardé : {model_path}\n")
 
     else:
+        save_metrics(
+            symbol,
+            old_metrics["mae"],
+            old_metrics["rmse"],
+            old_metrics["mape"],
+            old_metrics["r2"],
+        )
+
         print(f"Nouveau modèle refusé pour {symbol}. Ancien modèle conservé.\n")
 
 def main():
