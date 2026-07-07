@@ -15,13 +15,13 @@
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 
-## **Pourquoi ce projet ?**
+## Pourquoi ce projet ?
 
 Crypto Alerts a été conçu pour reproduire une plateforme de données de production couvrant l'ensemble du cycle de vie de la donnée : collecte, stockage, transformation, analyse, prédiction et restitution.
 
 Le projet combine ingestion batch et temps réel, orchestration, automatisation, modélisation analytique, Machine Learning, API REST, monitoring, génération d'alertes.
 
-## **Ce que fait la plateforme**
+## Ce que fait la plateforme
 
 - Collecte des **données** historiques avec CCXT
 - **Streaming** temps réel via WebSocket
@@ -32,11 +32,11 @@ Le projet combine ingestion batch et temps réel, orchestration, automatisation,
 - Modélisation analytique avec **dbt**
 - **Orchestration** des pipelines avec **Airflow**
 - Exposition des données via **FastAPI**
-- Visualisation opérationnel avec Streamlit
+- Visualisation opérationnelle avec Streamlit
 - Visualisation analytique avec **Tableau**
 
 
-## **Architecture**
+## Architecture
 
 Le diagramme suivant présente les principaux composants de la plateforme ainsi que les flux de données entre les différents services.
 
@@ -50,7 +50,7 @@ L'architecture repose sur deux pipelines complémentaires :
 - **un pipeline temps réel**, chargé de surveiller en continu les prix des cryptomonnaies et de déclencher les alertes personnalisées lorsque les conditions définies par les utilisateurs sont remplies.
 
 
-##  **Démonstration**
+##  Démonstration
 
 <p align="center">
   <a href="assets/gif/streamlit.gif">
@@ -95,7 +95,7 @@ L'architecture repose sur deux pipelines complémentaires :
 </p>
 
 
-## **Choix d'architecture**
+## Choix d'architecture
 
 Les principaux choix d'architecture sont les suivants :
 
@@ -110,7 +110,7 @@ Les principaux choix d'architecture sont les suivants :
 
 Cette architecture favorise la séparation des responsabilités, améliore la maintenabilité de la plateforme et facilite son évolution.
 
-## **Observabilité et visualisation**
+## Observabilité et visualisation
 
 Afin de proposer une plateforme de données complète, le projet intègre également :
 
@@ -119,7 +119,7 @@ Afin de proposer une plateforme de données complète, le projet intègre égale
 - **Prometheus** collecte les métriques des différents services.
 - **Grafana** supervise la plateforme et visualise les métriques techniques.
 
-## **Qualité logicielle**
+## Qualité logicielle
 
 Le projet applique plusieurs bonnes pratiques afin d'améliorer sa fiabilité.
 
@@ -127,11 +127,11 @@ Le projet applique plusieurs bonnes pratiques afin d'améliorer sa fiabilité.
 - **GitHub Actions** pour automatiser les tests et valider le projet à chaque Push ou Pull Request.
 
 
-## **Points techniques**
+## Points techniques
 
 - Pipelines ETL / ELT modulaires
 - Collecte incrémentale
-- Traitements SQL-first
+- Traitements **SQL-first**
 - Batch processing
 - Optimisation PostgreSQL (`INSERT ... SELECT`, `ON CONFLICT DO NOTHING`, `FOR UPDATE SKIP LOCKED`)
 - Couche analytique avec **dbt**
@@ -140,7 +140,7 @@ Le projet applique plusieurs bonnes pratiques afin d'améliorer sa fiabilité.
 - API REST documentée avec OpenAPI
 
 
-## **Scalabilité**
+## Scalabilité
 
 Le projet a été conçu pour gérer des volumes importants de données.
 
@@ -153,15 +153,14 @@ Tests réalisés :
 - Plateforme entièrement conteneurisée
 
 
-## **Évolutions prévues**
+## Évolutions prévues
 - Déploiement Cloud
 - Validation automatique des modèles
 - Notifications Email et SMS
-- Authentification JWT
 - Amélioration de la couverture de tests
 - Amélioration de Dbt
 
-## **Stack technique**
+## Stack technique
 
 - Python
 - PostgreSQL
@@ -178,7 +177,7 @@ Tests réalisés :
 ---
 
 
-## **Lancer le projet**
+## Lancer le projet
 
 ### 1. Configuration
 
@@ -201,22 +200,25 @@ Cette commande lance les services principaux du projet et initialise automatique
 docker compose --env-file .env.docker build --no-cache
 docker compose --env-file .env.docker up -d
 ```
-Vérifier que les tables se sont bien crées: 
+Vérifier que l'initialisation de la base s'est correctement déroulée : 
 ```bash
 docker logs crypto_init_db 
 ```
+Le message suivant doit être affiché :
 "Base de données initialisée avec succès."
 
 ### 3. La génération des utilisateurs se fait manuellement : 
 ```bash
 docker compose --env-file .env.docker run --rm pipeline python users_db/generate_fake_users.py <nombre d'utilisateurs souhaités>
 ```
+
+**Exemple:**
 ```bash
-Exemple:
 docker compose --env-file .env.docker run --rm pipeline python users_db/generate_fake_users.py 2000000
 ```
 
-### 4. Accéder à l'interface Airflow afin lancer le dag "setup" pour Collect > Features > Train > Predict
+
+### 4. Accéder à l'interface Airflow puis lancer le DAG `setup` pour Collect > Features Engineering > Train > Predict
 
 http://localhost:8080
 
@@ -236,6 +238,3 @@ Services utiles:
 - pgAdmin          : http://localhost:5050
 - Prometheus       : http://localhost:9090
 - Grafana          : http://localhost:3000
-
-
-
