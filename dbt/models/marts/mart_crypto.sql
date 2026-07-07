@@ -1,31 +1,57 @@
+WITH positions AS (
+    SELECT
+        symbol,
+        COUNT(DISTINCT user_id) FILTER (WHERE is_active = TRUE) AS total_holders,
+        COUNT(position_id) FILTER (WHERE is_active = TRUE) AS total_positions,
+        ROUND(AVG(buy_price) FILTER (WHERE is_active = TRUE)::numeric, 4) AS avg_buy_price,
+        ROUND(AVG(quantity) FILTER (WHERE is_active = TRUE)::numeric, 4) AS avg_quantity,
+        COALESCE(
+            ROUND(SUM(buy_price * quantity) FILTER (WHERE is_active = TRUE)::numeric, 2),
+            0
+        ) AS total_portfolio_value
+    FROM {{ ref('stg_user_positions') }}
+    GROUP BY symbol
+),
+
+daily_alerts AS (
+    SELECT
+        symbol,
+        COUNT(daily_alert_preference_id) AS total_daily_alert_preferences,
+        COUNT(daily_alert_preference_id) FILTER (WHERE enabled = TRUE) AS enabled_daily_alerts
+    FROM {{ ref('stg_daily_alert_preferences') }}
+    GROUP BY symbol
+),
+
+price_alerts AS (
+    SELECT
+        symbol,
+        COUNT(price_alert_id) AS total_price_alerts,
+        COUNT(price_alert_id) FILTER (WHERE is_active = TRUE) AS active_price_alerts,
+        COUNT(price_alert_id) FILTER (WHERE is_active = FALSE) AS triggered_price_alerts
+    FROM {{ ref('stg_price_alerts') }}
+    GROUP BY symbol
+)
+
 SELECT
     p.symbol,
 
-    COUNT(DISTINCT p.user_id) FILTER (WHERE p.is_active = TRUE) AS total_holders,
-    COUNT(p.position_id) FILTER (WHERE p.is_active = TRUE) AS total_positions,
+    p.total_holders,
+    p.total_positions,
+    p.avg_buy_price,
+    p.avg_quantity,
+    p.total_portfolio_value,
 
-    ROUND(AVG(p.buy_price) FILTER (WHERE p.is_active = TRUE)::numeric, 4) AS avg_buy_price,
-    ROUND(AVG(p.quantity) FILTER (WHERE p.is_active = TRUE)::numeric, 4) AS avg_quantity,
+    COALESCE(d.total_daily_alert_preferences, 0) AS total_daily_alert_preferences,
+    COALESCE(d.enabled_daily_alerts, 0) AS enabled_daily_alerts,
 
-    COALESCE(
-        ROUND(SUM(p.buy_price * p.quantity) FILTER (WHERE p.is_active = TRUE)::numeric, 2),
-        0
-    ) AS total_portfolio_value,
+    COALESCE(pa.total_price_alerts, 0) AS total_price_alerts,
+    COALESCE(pa.active_price_alerts, 0) AS active_price_alerts,
+    COALESCE(pa.triggered_price_alerts, 0) AS triggered_price_alerts
 
-    COUNT(d.daily_alert_preference_id) AS total_daily_alert_preferences,
-    COUNT(d.daily_alert_preference_id) FILTER (WHERE d.enabled = TRUE) AS enabled_daily_alerts,
+FROM positions p
 
-    COUNT(pa.price_alert_id) AS total_price_alerts,
-    COUNT(pa.price_alert_id) FILTER (WHERE pa.is_active = TRUE) AS active_price_alerts,
-    COUNT(pa.price_alert_id) FILTER (WHERE pa.is_active = FALSE) AS triggered_price_alerts
-
-FROM {{ ref('stg_user_positions') }} p
-
-LEFT JOIN {{ ref('stg_daily_alert_preferences') }} d
+LEFT JOIN daily_alerts d
     ON p.symbol = d.symbol
 
-LEFT JOIN {{ ref('stg_price_alerts') }} pa
+LEFT JOIN price_alerts pa
     ON p.symbol = pa.symbol
-
-GROUP BY
-    p.symbol
