@@ -237,3 +237,6 @@ airflow/logs/
 # Coverage
 .coverage
 htmlcov/
+
+#ML
+models/archive/
