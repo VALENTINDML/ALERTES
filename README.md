@@ -1,4 +1,4 @@
-# 🚀 Crypto Alerts
+# Crypto Alerts
 
 > Plateforme de **Data Engineering & Analytics Engineering** reproduisant une architecture de production capable de collecter des données historiques et temps réel, d'alimenter des pipelines analytiques et de Machine Learning, puis de générer des prédictions quotidiennes et des alertes personnalisées.
 
@@ -15,29 +15,28 @@
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 
-## Pourquoi ce projet ?
+## **Pourquoi ce projet ?**
 
 Crypto Alerts a été conçu pour reproduire une plateforme de données de production couvrant l'ensemble du cycle de vie de la donnée : collecte, stockage, transformation, analyse, prédiction et restitution.
 
 Le projet combine ingestion batch et temps réel, orchestration, automatisation, modélisation analytique, Machine Learning, API REST, monitoring, génération d'alertes.
 
-## Ce que fait la plateforme
+## **Ce que fait la plateforme**
 
 - Collecte des **données** historiques avec CCXT
 - **Streaming** temps réel via WebSocket
 - Stockage **PostgreSQL**
 - Feature Engineering des données de marché
 - Entraînement et prédiction Machine Learning
-- Génération de notifications personnalisées
+- Génération d'alertes personnalisées
 - Modélisation analytique avec **dbt**
 - **Orchestration** des pipelines avec **Airflow**
 - Exposition des données via **FastAPI**
-- Dashboard opérationnel avec Streamlit
-- Dashboard analytique avec **Tableau**
+- Visualisation opérationnel avec Streamlit
+- Visualisation analytique avec **Tableau**
 
----
 
-## 🏗️ Architecture
+## **Architecture**
 
 Le diagramme suivant présente les principaux composants de la plateforme ainsi que les flux de données entre les différents services.
 
@@ -50,9 +49,8 @@ L'architecture repose sur deux pipelines complémentaires :
 - **un pipeline batch**, chargé de collecter les données historiques, de construire les indicateurs techniques, d'entraîner les modèles de Machine Learning et de générer les prédictions quotidiennes ;
 - **un pipeline temps réel**, chargé de surveiller en continu les prix des cryptomonnaies et de déclencher les alertes personnalisées lorsque les conditions définies par les utilisateurs sont remplies.
 
-## 🎥 Démonstration
 
-## 🎥 Démonstration
+##  **Démonstration**
 
 <p align="center">
   <a href="assets/gif/streamlit.gif">
@@ -97,7 +95,7 @@ L'architecture repose sur deux pipelines complémentaires :
 </p>
 
 
-## 🏗️ Choix d'architecture
+## **Choix d'architecture**
 
 Les principaux choix d'architecture sont les suivants :
 
@@ -112,7 +110,7 @@ Les principaux choix d'architecture sont les suivants :
 
 Cette architecture favorise la séparation des responsabilités, améliore la maintenabilité de la plateforme et facilite son évolution.
 
-## 📊 Observabilité et visualisation
+## **Observabilité et visualisation**
 
 Afin de proposer une plateforme de données complète, le projet intègre également :
 
@@ -121,7 +119,7 @@ Afin de proposer une plateforme de données complète, le projet intègre égale
 - **Prometheus** collecte les métriques des différents services.
 - **Grafana** supervise la plateforme et visualise les métriques techniques.
 
-## ✅ Qualité logicielle
+## **Qualité logicielle**
 
 Le projet applique plusieurs bonnes pratiques afin d'améliorer sa fiabilité.
 
@@ -129,7 +127,7 @@ Le projet applique plusieurs bonnes pratiques afin d'améliorer sa fiabilité.
 - **GitHub Actions** pour automatiser les tests et valider le projet à chaque Push ou Pull Request.
 
 
-## ⚡ Points techniques
+## **Points techniques**
 
 - Pipelines ETL / ELT modulaires
 - Collecte incrémentale
@@ -142,7 +140,7 @@ Le projet applique plusieurs bonnes pratiques afin d'améliorer sa fiabilité.
 - API REST documentée avec OpenAPI
 
 
-## 📈 Scalabilité
+## **Scalabilité**
 
 Le projet a été conçu pour gérer des volumes importants de données.
 
@@ -155,15 +153,15 @@ Tests réalisés :
 - Plateforme entièrement conteneurisée
 
 
-## Évolutions prévues
-- Déploiement Kubernetes
-- Déploiement Cloud (AWS)
+## **Évolutions prévues**
+- Déploiement Cloud
 - Validation automatique des modèles
 - Notifications Email et SMS
 - Authentification JWT
 - Amélioration de la couverture de tests
+- Amélioration de Dbt
 
-## 🛠️ Stack technique
+## **Stack technique**
 
 - Python
 - PostgreSQL
@@ -180,8 +178,64 @@ Tests réalisés :
 ---
 
 
-## Lancer le projet
+## **Lancer le projet**
 
+### 1. Configuration
+
+Les fichiers de configuration `.env` ne sont pas versionnés et sont exclus du dépôt via `.gitignore`.
+
+Avant de lancer le projet, créer les fichiers `.env` à partir des modèles fournis :
+
+```bash
+cp .env.example .env
+cp .env.docker.example .env.docker
 ```
 
----
+Modifier ensuite les variables d'environnement selon votre configuration si nécessaire.
+
+### 2. Démarrer l’environnement Docker
+
+Cette commande lance les services principaux du projet et initialise automatiquement les tables de la base PostgreSQL.
+
+```bash
+docker compose --env-file .env.docker build --no-cache
+docker compose --env-file .env.docker up -d
+```
+Vérifier que les tables se sont bien crées: 
+```bash
+docker logs crypto_init_db 
+```
+"Base de données initialisée avec succès."
+
+### 3. La génération des utilisateurs se fait manuellement : 
+```bash
+docker compose --env-file .env.docker run --rm pipeline python users_db/generate_fake_users.py <nombre d'utilisateurs souhaités>
+```
+```bash
+Exemple:
+docker compose --env-file .env.docker run --rm pipeline python users_db/generate_fake_users.py 2000000
+```
+
+### 4. Accéder à l'interface Airflow afin lancer le dag "setup" pour Collect > Features > Train > Predict
+
+http://localhost:8080
+
+### 5. La partie analytics est optionnelle. Pour lancer dbt : 
+```bash
+docker compose --env-file .env.docker --profile manual run --rm dbt dbt debug
+docker compose --env-file .env.docker --profile manual run --rm dbt dbt run
+docker compose --env-file .env.docker --profile manual run --rm dbt dbt test
+docker compose --env-file .env.docker --profile manual run --rm dbt dbt docs generate
+```
+
+Services utiles:
+
+- API FastAPI      : http://localhost:8000
+- Streamlit        : http://localhost:8501
+- Airflow          : http://localhost:8080
+- pgAdmin          : http://localhost:5050
+- Prometheus       : http://localhost:9090
+- Grafana          : http://localhost:3000
+
+
+
