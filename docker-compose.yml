@@ -23,6 +23,26 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Initialisation automatique des tables de la base principale.
+  # La génération des utilisateurs reste manuelle.
+  init-db:
+    build: .
+    container_name: crypto_init_db
+    env_file:
+      - .env.docker
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: python users_db/init_database.py
+    restart: "no"
 
   # Interface d'administration PostgreSQL.
   pgadmin:
@@ -34,7 +54,8 @@ services:
     ports:
       - "5050:80"
     depends_on:
-      - db
+      init-db:
+        condition: service_completed_successfully
 
   # Base PostgreSQL dédiée à Airflow.
   airflow-db:
@@ -55,7 +76,8 @@ services:
     env_file:
       - .env.docker
     depends_on:
-      - db
+      init-db:
+        condition: service_completed_successfully
     ports:
       - "8000:8000"
     volumes:
@@ -84,7 +106,8 @@ services:
     env_file:
       - .env.docker
     depends_on:
-      - db
+      init-db:
+        condition: service_completed_successfully
     volumes:
       - .:/app
     command: python run_pipeline.py
@@ -98,7 +121,8 @@ services:
     env_file:
       - .env.docker
     depends_on:
-      - db
+      init-db:
+        condition: service_completed_successfully
     volumes:
       - .:/app
       - ./dbt/profiles.yml.example:/root/.dbt/profiles.yml
@@ -234,7 +258,8 @@ services:
     env_file:
       - .env.docker
     depends_on:
-      - db
+      init-db:
+        condition: service_completed_successfully
     volumes:
       - .:/app
     command: python streaming/price_alert_stream.py
@@ -246,7 +271,8 @@ services:
     env_file:
       - .env.docker
     depends_on:
-      - db
+      init-db:
+        condition: service_completed_successfully
     volumes:
       - .:/app
     command: python streaming/market_stream.py

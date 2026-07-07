@@ -13,7 +13,7 @@ Tables créées :
 """
 from config.db import get_connection
 
-def init_users_db():
+def init_database():
     conn = get_connection()
     cur = conn.cursor()
 
@@ -353,4 +353,4 @@ def init_users_db():
 
 
 if __name__ == "__main__":
-    init_users_db()
+    init_database()
