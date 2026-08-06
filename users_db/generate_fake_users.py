@@ -30,7 +30,9 @@ from config.db import get_connection
 from config.symbols import SYMBOLS, REFERENCE_PRICES, SYMBOL_HYPE
 
 
-DEFAULT_TOTAL_USERS = 1000
+# Valeur par défaut utilisée sans argument CLI.
+# Ajustable : python users_db/generate_fake_users.py <nombre d'utilisateurs>
+DEFAULT_TOTAL_USERS = 50000
 
 BATCH_SIZE = 50000
 INSERT_PAGE_SIZE = 5000

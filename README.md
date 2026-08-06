@@ -130,7 +130,7 @@ Le projet applique plusieurs bonnes pratiques afin d'améliorer sa fiabilité.
 ## Points techniques
 
 - Pipelines ETL / ELT modulaires
-- Collecte incrémentale
+- Collecte idempotente (upsert `ON CONFLICT`)
 - Traitements **SQL-first**
 - Batch processing
 - Optimisation PostgreSQL (`INSERT ... SELECT`, `ON CONFLICT DO NOTHING`, `FOR UPDATE SKIP LOCKED`)
@@ -140,17 +140,43 @@ Le projet applique plusieurs bonnes pratiques afin d'améliorer sa fiabilité.
 - API REST documentée avec OpenAPI
 
 
-## Scalabilité
+## Mesures de performance
 
-Le projet a été conçu pour gérer des volumes importants de données.
+Chiffres relevés en local (macOS, Docker Desktop, un seul nœud), à
+l'échelle de **200 000 utilisateurs générés** :
 
-Tests réalisés :
+- Build Docker complet from scratch (`--no-cache`) : **81 s**, 16 services
+- Base PostgreSQL : **~2,4 M de lignes / 473 MB** (10 tables)
+- Génération d'utilisateurs : **200 000 utilisateurs en 77 s**, soit
+  **1 407 243 lignes** au total (utilisateurs + positions + préférences +
+  alertes) à **~18 300 lignes/s** en batch processing
+- Alertes de prix générées : **361 810** à cette échelle
+- Ingestion batch : 180 jours × 2 symboles (**8 640 bougies**) en **8,0 s**
+- Notifications quotidiennes : **372 503 en 6,2 s** en SQL pur
+  (`INSERT ... SELECT`)
+- Stream d'alertes : **2 994 notifications/s** en résorption de backlog,
+  batchs de 5 000 commités en **~90 ms** (`FOR UPDATE SKIP LOCKED`)
+- API : **p95 de 2 à 39 ms** selon l'endpoint, mesuré avec 553 000
+  notifications en base
+- dbt : 12 modèles, 28 tests, **40/40 PASS**
 
-- Génération de **2 000 000 d'utilisateurs** en environ **13 minutes** grâce au batch processing
-- Plusieurs **millions d'alertes** de prix
-- Pipelines indépendants
-- Aucun chargement massif des alertes en mémoire Python
-- Plateforme entièrement conteneurisée
+Aucun chargement massif des alertes en mémoire Python : les traitements
+volumineux sont délégués à PostgreSQL.
+
+### Machine Learning : un résultat assumé
+
+Les performances prédictives mesurées sont mauvaises, et c'est documenté
+volontairement : **R² de −0,48 (BTC/USDT) et −2,65 (ETH/USDT)** sur un
+split chronologique 80/20 — le modèle RandomForest est battu par une
+baseline constante à zéro sur les deux symboles. Prédire le marché crypto
+à 24 h avec des indicateurs techniques simples ne fonctionne pas, et ce
+projet ne prétend pas le contraire.
+
+Le composant ML sert à démontrer le **cycle MLOps complet** : entraînement,
+évaluation champion/challenger sur un jeu de test commun, promotion
+conditionnelle du modèle, archivage des versions et historisation des
+métriques (MAE, RMSE, MAPE, R²) en base — c'est précisément cette
+instrumentation qui permet de mesurer honnêtement les limites du modèle.
 
 
 ## Évolutions prévues

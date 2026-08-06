@@ -1,21 +1,142 @@
-# Documentation des modèles métier (marts).
+# Documentation et tests des modèles métier (marts).
 #
 # Les marts sont destinés à la consommation par les dashboards,
 # les APIs ou les outils de Business Intelligence (Tableau, Power BI...).
 version: 2
 
 models:
-  - name: mart_users_by_country
-    description: "Aggregated users by country for Tableau dashboards."
+  - name: mart_users
+    description: >
+      Vue à une ligne par utilisateur : profil, valeur du portefeuille
+      et compteurs de positions, préférences d'alertes quotidiennes
+      et alertes de prix.
+    columns:
+      - name: user_id
+        description: "Identifiant unique de l'utilisateur (users.id)."
+        data_tests:
+          - unique
+          - not_null
+      - name: email
+        description: "Email de l'utilisateur (unique dans la table users)."
+        data_tests:
+          - unique
+          - not_null
+      - name: is_active
+        description: "Statut d'activité du compte."
+        data_tests:
+          - not_null
+      - name: country
+        description: "Pays de l'utilisateur."
+      - name: portfolio_value
+        description: >
+          Valeur totale du portefeuille (somme buy_price * quantity des
+          positions actives), 0 si aucune position.
+        data_tests:
+          - not_null
+      - name: total_positions
+        description: "Nombre de positions actives."
+        data_tests:
+          - not_null
+      - name: total_distinct_symbols
+        description: "Nombre de cryptomonnaies distinctes détenues (positions actives)."
+      - name: enabled_daily_alerts
+        description: "Nombre d'alertes quotidiennes activées."
+      - name: total_daily_alert_preferences
+        description: "Nombre total de préférences d'alertes quotidiennes."
+      - name: active_price_alerts
+        description: "Nombre d'alertes de prix encore actives."
+      - name: total_price_alerts
+        description: "Nombre total d'alertes de prix créées."
 
-  - name: mart_notifications_by_type
-    description: "Notification statistics by type, status and symbol."
+  - name: mart_crypto
+    description: >
+      Vue à une ligne par cryptomonnaie détenue : nombre de détenteurs,
+      positions, valeur agrégée des portefeuilles et compteurs d'alertes.
+      Seuls les symboles présents dans user_positions apparaissent.
+    columns:
+      - name: symbol
+        description: "Paire crypto, par exemple BTC/USDT."
+        data_tests:
+          - unique
+          - not_null
+      - name: total_holders
+        description: "Nombre d'utilisateurs distincts détenant le symbole (positions actives)."
+        data_tests:
+          - not_null
+      - name: total_positions
+        description: "Nombre de positions actives sur le symbole."
+        data_tests:
+          - not_null
+      - name: avg_buy_price
+        description: "Prix d'achat moyen des positions actives (nullable si aucune position active)."
+      - name: avg_quantity
+        description: "Quantité moyenne par position active (nullable si aucune position active)."
+      - name: total_portfolio_value
+        description: "Valeur cumulée des positions actives, 0 par défaut."
+        data_tests:
+          - not_null
+      - name: total_daily_alert_preferences
+        description: "Nombre total de préférences d'alertes quotidiennes sur le symbole."
+        data_tests:
+          - not_null
+      - name: enabled_daily_alerts
+        description: "Nombre d'alertes quotidiennes activées sur le symbole."
+      - name: total_price_alerts
+        description: "Nombre total d'alertes de prix sur le symbole."
+        data_tests:
+          - not_null
+      - name: active_price_alerts
+        description: "Nombre d'alertes de prix actives sur le symbole."
+      - name: triggered_price_alerts
+        description: "Nombre d'alertes de prix déclenchées (désactivées)."
 
-  - name: mart_predictions_latest
-    description: "Latest ML prediction available for each symbol."
-
-  - name: mart_price_alerts_status
-    description: "Price alert distribution by symbol, direction and active status."
-
-  - name: mart_model_metrics_latest
-    description: "Latest model metrics for each cryptocurrency."
+  - name: mart_notifications
+    description: >
+      Vue à une ligne par notification, enrichie du profil géographique
+      de l'utilisateur et de drapeaux booléens par type de notification.
+    columns:
+      - name: notification_id
+        description: "Identifiant unique de la notification (notifications.id)."
+        data_tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: "Utilisateur destinataire."
+        data_tests:
+          - not_null
+      - name: email
+        description: "Email du destinataire (jointure sur stg_users)."
+      - name: country
+        description: "Pays du destinataire."
+      - name: symbol
+        description: "Paire crypto concernée par la notification."
+        data_tests:
+          - not_null
+      - name: notification_type
+        description: "Type de notification : prévision quotidienne ou alerte de prix."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["daily_prediction", "price_target"]
+      - name: status
+        description: "Statut d'envoi de la notification."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["pending", "sent", "failed", "cancelled"]
+      - name: created_at
+        description: "Date de création de la notification."
+        data_tests:
+          - not_null
+      - name: sent_at
+        description: "Date d'envoi effective (null tant que non envoyée)."
+      - name: is_sent
+        description: "Vrai si la notification a été envoyée (sent_at renseigné)."
+        data_tests:
+          - not_null
+      - name: is_daily_prediction
+        description: "Vrai si la notification est une prévision quotidienne."
+      - name: is_price_target
+        description: "Vrai si la notification est une alerte de prix."
