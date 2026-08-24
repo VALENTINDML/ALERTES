@@ -101,11 +101,11 @@ Les principaux choix d'architecture sont les suivants :
 
 - **PostgreSQL** centralise les données opérationnelles et permet d'exécuter les traitements **SQL** au plus près des données.
 - **Airflow** orchestre les pipelines de collecte, de transformation, d'entraînement et de prédiction.
-- **dbt** construit une couche analytique réutilisable et indépendante de la base opérationnelle.
+- **dbt** construit une couche analytique réutilisable, séparée logiquement des tables opérationnelles par des schémas dédiés (`staging`, `marts`) au sein de la même base PostgreSQL.
 - **FastAPI** expose les données, les prédictions et les métriques via une API REST documentée automatiquement.
 - **Streamlit** fournit un tableau de bord opérationnel pour le suivi de la plateforme en temps réel.
 - **Tableau** exploite la couche analytique afin de produire des tableaux de bord orientés métier.
-- **Prometheus** collecte les métriques des différents services, tandis que **Grafana** assure leur supervision et leur visualisation.
+- **Prometheus** collecte les métriques de l'API (endpoint `/metrics`) et des conteneurs via cAdvisor, tandis que **Grafana** assure leur supervision et leur visualisation.
 - **Docker Compose** permet de reproduire l'ensemble de l'environnement de développement avec une seule commande.
 
 Cette architecture favorise la séparation des responsabilités, améliore la maintenabilité de la plateforme et facilite son évolution.
@@ -116,14 +116,14 @@ Afin de proposer une plateforme de données complète, le projet intègre égale
 
 - **Streamlit** fournit une interface opérationnelle permettant de suivre les données de marché, les prédictions, les notifications et les principaux indicateurs de la plateforme.
 - **Tableau** permet d'explorer les données métier à travers des tableaux de bord analytiques (répartition des utilisateurs, composition des portefeuilles, statistiques d'utilisation, etc.).
-- **Prometheus** collecte les métriques des différents services.
+- **Prometheus** collecte les métriques de l'API (endpoint `/metrics`) et des conteneurs via cAdvisor.
 - **Grafana** supervise la plateforme et visualise les métriques techniques.
 
 ## Qualité logicielle
 
 Le projet applique plusieurs bonnes pratiques afin d'améliorer sa fiabilité.
 
-- **Pytest** pour les tests unitaires et d'intégration.
+- **Pytest** pour les tests unitaires.
 - **GitHub Actions** pour automatiser les tests et valider le projet à chaque Push ou Pull Request.
 
 
@@ -142,10 +142,13 @@ Le projet applique plusieurs bonnes pratiques afin d'améliorer sa fiabilité.
 
 ## Mesures de performance
 
-Chiffres relevés en local (macOS, Docker Desktop, un seul nœud), à
-l'échelle de **200 000 utilisateurs générés** :
+Mesures relevées les 6 et 24 août 2026, en local (macOS, Docker Desktop,
+nœud unique), à l'échelle de **200 000 utilisateurs générés**. Les volumes
+en base croissent mécaniquement, les DAGs `@daily` régénérant environ
+372 000 notifications par jour :
 
-- Build Docker complet from scratch (`--no-cache`) : **81 s**, 16 services
+- Build Docker complet from scratch (`--no-cache`) : **90 s**, 16 services
+  (dépendances épinglées incluses)
 - Base PostgreSQL : **~2,4 M de lignes / 473 MB** (10 tables)
 - Génération d'utilisateurs : **200 000 utilisateurs en 77 s**, soit
   **1 407 243 lignes** au total (utilisateurs + positions + préférences +
@@ -158,7 +161,7 @@ l'échelle de **200 000 utilisateurs générés** :
   batchs de 5 000 commités en **~90 ms** (`FOR UPDATE SKIP LOCKED`)
 - API : **p95 de 2 à 39 ms** selon l'endpoint, mesuré avec 553 000
   notifications en base
-- dbt : 12 modèles, 28 tests, **40/40 PASS**
+- dbt : 12 modèles, 52 tests, **64/64 PASS**
 
 Aucun chargement massif des alertes en mémoire Python : les traitements
 volumineux sont délégués à PostgreSQL.
@@ -212,8 +215,8 @@ Les fichiers de configuration `.env` ne sont pas versionnés et sont exclus du d
 Avant de lancer le projet, créer les fichiers `.env` à partir des modèles fournis :
 
 ```bash
-cp .env.example .env
-cp .env.docker.example .env.docker
+cp .env.exemple .env
+cp .env.docker.exemple .env.docker
 ```
 
 Modifier ensuite les variables d'environnement selon votre configuration si nécessaire.
