@@ -243,7 +243,7 @@ docker compose --env-file .env.docker run --rm pipeline python users_db/generate
 
 **Exemple:**
 ```bash
-docker compose --env-file .env.docker run --rm pipeline python users_db/generate_fake_users.py 2000000
+docker compose --env-file .env.docker run --rm pipeline python users_db/generate_fake_users.py 200000
 ```
 
 
