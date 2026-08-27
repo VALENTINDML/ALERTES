@@ -13,4 +13,4 @@ SELECT
     language,
     timezone,
     created_at
-FROM public.users
+FROM {{ source('crypto_db', 'users') }}

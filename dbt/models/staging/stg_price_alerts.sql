@@ -7,4 +7,4 @@ SELECT
     is_active,
     triggered_at,
     created_at
-FROM public.price_alerts
+FROM {{ source('crypto_db', 'price_alerts') }}

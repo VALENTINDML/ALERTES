@@ -18,4 +18,4 @@ SELECT
     volatility_24h,
     volume_ratio,
     target_24h_percent
-FROM public.features_crypto
+FROM {{ source('crypto_db', 'features_crypto') }}
