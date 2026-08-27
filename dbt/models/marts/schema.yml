@@ -7,9 +7,10 @@ version: 2
 models:
   - name: mart_users
     description: >
-      Vue à une ligne par utilisateur : profil, valeur du portefeuille
+      Une ligne par utilisateur : profil, prix de revient du portefeuille
       et compteurs de positions, préférences d'alertes quotidiennes
-      et alertes de prix.
+      et alertes de prix. Les trois tables 1-N sont pré-agrégées au grain
+      user_id avant jointure, pour éviter tout produit cartésien.
     columns:
       - name: user_id
         description: "Identifiant unique de l'utilisateur (users.id)."
@@ -27,10 +28,11 @@ models:
           - not_null
       - name: country
         description: "Pays de l'utilisateur."
-      - name: portfolio_value
+      - name: cost_basis
         description: >
-          Valeur totale du portefeuille (somme buy_price * quantity des
-          positions actives), 0 si aucune position.
+          Prix de revient du portefeuille : somme buy_price * quantity des
+          positions actives, 0 si aucune position. Ce n'est pas une valeur
+          de marché — elle nécessiterait le dernier cours connu du symbole.
         data_tests:
           - not_null
       - name: total_positions
