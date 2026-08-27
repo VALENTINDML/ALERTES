@@ -73,7 +73,7 @@ models:
         description: "Prix d'achat moyen des positions actives (nullable si aucune position active)."
       - name: avg_quantity
         description: "Quantité moyenne par position active (nullable si aucune position active)."
-      - name: total_portfolio_value
+      - name: total_cost_basis
         description: >
           Prix de revient cumulé des positions actives sur le symbole :
           somme buy_price * quantity, 0 par défaut. Ce n'est pas une valeur
