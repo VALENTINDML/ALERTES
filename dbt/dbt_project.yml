@@ -20,3 +20,11 @@ models:
     marts:
       +materialized: view
       +schema: marts
+
+      # Ces deux marts agrègent l'intégralité des positions et des alertes.
+      # Les matérialiser en table évite que chaque rafraîchissement Tableau
+      # rejoue l'agrégation à travers la pile de vues.
+      mart_users:
+        +materialized: table
+      mart_crypto:
+        +materialized: table
