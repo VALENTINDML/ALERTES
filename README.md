@@ -295,6 +295,8 @@ Le message suivant doit être affiché :
 docker compose --env-file .env.docker run --rm pipeline python users_db/generate_fake_users.py <nombre d'utilisateurs souhaités>
 ```
 
+Les mesures de performance présentées plus haut ont été relevées avec 200000.
+
 ### 4. Accéder à l'interface Airflow puis lancer le DAG `setup` pour Collect > Features Engineering > Train > Predict
 
 http://localhost:8080
