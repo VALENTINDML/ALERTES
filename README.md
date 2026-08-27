@@ -8,7 +8,6 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571.svg?style=for-the-badge&logo=fastapi)
 ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-%23FE4B4B.svg?style=for-the-badge&logo=streamlit&logoColor=white)
-![Tableau](https://img.shields.io/badge/Tableau-E97627?style=for-the-badge&logo=tableau&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white)
 ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white)
 ![Pytest](https://img.shields.io/badge/Pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
@@ -33,7 +32,7 @@ Le projet combine ingestion batch et temps réel, orchestration, automatisation,
 - **Orchestration** des pipelines avec **Airflow**
 - Exposition des données via **FastAPI**
 - Visualisation opérationnelle avec Streamlit
-- Visualisation analytique avec **Tableau**
+- Couche analytique exposée dans des schémas dédiés, consommable par un outil de BI
 
 
 ## Architecture
@@ -68,32 +67,6 @@ L'architecture repose sur deux pipelines complémentaires :
   <b>Pipelines Airflow</b>
 </p>
 
-### Dashboards Tableau
-
-<p align="center">
-  <a href="assets/images/mart_users.png">
-    <img src="assets/images/mart_users.png" width="700" alt="Dashboard Tableau - Utilisateurs">
-  </a>
-  <br>
-  <b>Analyse des portefeuilles utilisateurs</b>
-</p>
-
-<p align="center">
-  <a href="assets/images/mart_notifications.png">
-    <img src="assets/images/mart_notifications.png" width="700" alt="Dashboard Tableau - Notifications">
-  </a>
-  <br>
-  <b>Analyse des notifications de la plateforme</b>
-</p>
-
-<p align="center">
-  <a href="assets/images/mart_crypto.png">
-    <img src="assets/images/mart_crypto.png" width="700" alt="Dashboard Tableau - Cryptomonnaies">
-  </a>
-  <br>
-  <b>Analyse des cryptomonnaies et des alertes</b>
-</p>
-
 
 ## Choix d'architecture
 
@@ -104,18 +77,88 @@ Les principaux choix d'architecture sont les suivants :
 - **dbt** construit une couche analytique réutilisable, séparée logiquement des tables opérationnelles par des schémas dédiés (`staging`, `marts`) au sein de la même base PostgreSQL.
 - **FastAPI** expose les données, les prédictions et les métriques via une API REST documentée automatiquement.
 - **Streamlit** fournit un tableau de bord opérationnel pour le suivi de la plateforme en temps réel.
-- **Tableau** exploite la couche analytique afin de produire des tableaux de bord orientés métier.
+- La couche analytique est isolée dans les schémas `staging` et `marts`, prête à être interrogée par un outil de BI ou par l'API.
 - **Prometheus** collecte les métriques de l'API (endpoint `/metrics`) et des conteneurs via cAdvisor, tandis que **Grafana** assure leur supervision et leur visualisation.
 - **Docker Compose** permet de reproduire l'ensemble de l'environnement de développement avec une seule commande.
 
 Cette architecture favorise la séparation des responsabilités, améliore la maintenabilité de la plateforme et facilite son évolution.
+
+## Couche analytique dbt
+
+La couche dbt est organisée en deux niveaux, matérialisés dans des schémas
+PostgreSQL distincts de celui des tables opérationnelles :
+
+- `staging` : 9 modèles, un par table brute. Ils renomment l'identifiant
+  technique en clé explicite et n'appliquent aucune transformation métier.
+- `marts` : 3 modèles métier, agrégés et documentés colonne par colonne
+  (34 colonnes décrites).
+
+Les 9 tables brutes sont déclarées comme sources dbt. Le lignage est donc
+complet depuis les tables du schéma `public` jusqu'aux marts, aucun schéma
+n'est écrit en dur dans les modèles, et `dbt source freshness` est
+disponible.
+
+`mart_users` et `mart_crypto` sont matérialisés en table, les 9 modèles de
+staging et `mart_notifications` en vue. Les deux marts agrégés balaient
+l'intégralité des positions et des alertes : les matérialiser évite de
+rejouer l'agrégation à chaque interrogation.
+
+### Les trois marts
+
+`mart_users` : une ligne par utilisateur, matérialisé en table. Profil
+(email, pays, devise, langue, fuseau), `cost_basis` (prix de revient du
+portefeuille, somme de `buy_price * quantity` sur les positions actives, à
+distinguer d'une valeur de marché), `total_positions`,
+`total_distinct_symbols`, et les compteurs de préférences d'alertes
+quotidiennes et d'alertes de prix. Les trois tables 1-N sont pré-agrégées au
+grain `user_id` avant jointure.
+
+`mart_crypto` : une ligne par cryptomonnaie détenue, matérialisé en table.
+`total_holders`, `total_positions`, `avg_buy_price`, `avg_quantity`,
+`total_portfolio_value`, ainsi que les compteurs d'alertes quotidiennes et
+d'alertes de prix, dont `triggered_price_alerts` qui s'appuie sur
+`triggered_at`. Seuls les symboles présents dans `user_positions`
+apparaissent.
+
+`mart_notifications` : une ligne par notification, matérialisé en vue. Type,
+statut, dates de création et d'envoi, enrichis du profil géographique du
+destinataire, avec les drapeaux `is_sent`, `is_daily_prediction` et
+`is_price_target`.
+
+### Tests
+
+Les 71 tests couvrent l'unicité et la présence des identifiants, les
+domaines de valeurs adossés aux contraintes `CHECK` de la base, l'intégrité
+référentielle sur les clés étrangères déclarées dans le DDL, et l'unicité du
+couple `(user_id, symbol)` des préférences d'alertes quotidiennes.
+
+S'y ajoute un test de réconciliation entre un mart et sa source : il compare
+`SUM(cost_basis)` issu de `mart_users` à la somme calculée directement sur
+`stg_user_positions`, et échoue si l'écart dépasse une tolérance dérivée des
+arrondis, `cost_basis` étant arrondi à deux décimales par utilisateur avant
+sommation. Le même test vérifie l'égalité exacte entre
+`SUM(total_positions)` et le nombre de positions actives. C'est le seul test
+de la suite dont la réussite ne découle ni d'une contrainte PostgreSQL, ni
+de la forme du SQL.
+
+```
+$ dbt build
+
+Running with dbt=1.12.0
+Found 12 models, 71 data tests, 9 sources, 477 macros
+Finished running 2 table models, 71 data tests, 10 view models in 1.33s
+Completed successfully
+Done. PASS=83 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=83
+```
+
+<!-- TODO: recit correction fan-out -->
 
 ## Observabilité et visualisation
 
 Afin de proposer une plateforme de données complète, le projet intègre également :
 
 - **Streamlit** fournit une interface opérationnelle permettant de suivre les données de marché, les prédictions, les notifications et les principaux indicateurs de la plateforme.
-- **Tableau** permet d'explorer les données métier à travers des tableaux de bord analytiques (répartition des utilisateurs, composition des portefeuilles, statistiques d'utilisation, etc.).
+- Les **marts dbt** exposent les données métier (répartition des utilisateurs, composition des portefeuilles, statistiques d'utilisation) dans le schéma `marts`, sous une forme directement interrogeable en SQL.
 - **Prometheus** collecte les métriques de l'API (endpoint `/metrics`) et des conteneurs via cAdvisor.
 - **Grafana** supervise la plateforme et visualise les métriques techniques.
 
@@ -161,7 +204,7 @@ en base croissent mécaniquement, les DAGs `@daily` régénérant environ
   batchs de 5 000 commités en **~90 ms** (`FOR UPDATE SKIP LOCKED`)
 - API : **p95 de 2 à 39 ms** selon l'endpoint, mesuré avec 553 000
   notifications en base
-- dbt : 12 modèles, 52 tests, **64/64 PASS**
+- dbt : 12 modèles, 71 tests, 9 sources, **83/83 PASS**
 
 Aucun chargement massif des alertes en mémoire Python : les traitements
 volumineux sont délégués à PostgreSQL.
@@ -198,7 +241,6 @@ instrumentation qui permet de mesurer honnêtement les limites du modèle.
 - dbt
 - FastAPI
 - Streamlit
-- Tableau
 - Prometheus
 - Grafana
 - GitHub Actions
