@@ -78,7 +78,7 @@ Les principaux choix d'architecture sont les suivants :
 - **FastAPI** expose les données, les prédictions et les métriques via une API REST documentée automatiquement.
 - **Streamlit** fournit un tableau de bord opérationnel pour le suivi de la plateforme en temps réel.
 - La couche analytique est isolée dans les schémas `staging` et `marts`, prête à être interrogée par un outil de BI ou par l'API.
-- **Prometheus** collecte les métriques de l'API (endpoint `/metrics`) et des conteneurs via cAdvisor, tandis que **Grafana** assure leur supervision et leur visualisation.
+- **Prometheus** collecte les métriques de l'API (endpoint `/metrics`) et des conteneurs via cAdvisor, tandis que **Grafana** en assure la visualisation.
 - **Docker Compose** permet de reproduire l'ensemble de l'environnement de développement avec une seule commande.
 
 Cette architecture favorise la séparation des responsabilités, améliore la maintenabilité de la plateforme et facilite son évolution.
@@ -171,7 +171,7 @@ Afin de proposer une plateforme de données complète, le projet intègre égale
 - **Streamlit** fournit une interface opérationnelle permettant de suivre les données de marché, les prédictions, les notifications et les principaux indicateurs de la plateforme.
 - Les **marts dbt** exposent les données métier (répartition des utilisateurs, composition des portefeuilles, statistiques d'utilisation) dans le schéma `marts`, sous une forme directement interrogeable en SQL.
 - **Prometheus** collecte les métriques de l'API (endpoint `/metrics`) et des conteneurs via cAdvisor.
-- **Grafana** supervise la plateforme et visualise les métriques techniques.
+- **Grafana** visualise les métriques collectées par Prometheus.
 
 ## Qualité logicielle
 
@@ -241,7 +241,6 @@ instrumentation qui permet de mesurer honnêtement les limites du modèle.
 - Validation automatique des modèles
 - Notifications Email et SMS
 - Amélioration de la couverture de tests
-- Amélioration de Dbt
 
 ## Stack technique
 
@@ -296,11 +295,7 @@ Le message suivant doit être affiché :
 docker compose --env-file .env.docker run --rm pipeline python users_db/generate_fake_users.py <nombre d'utilisateurs souhaités>
 ```
 
-**Exemple:**
-```bash
-docker compose --env-file .env.docker run --rm pipeline python users_db/generate_fake_users.py 200000
-```
-
+Les mesures de performance présentées plus haut ont été relevées avec 200000.
 
 ### 4. Accéder à l'interface Airflow puis lancer le DAG `setup` pour Collect > Features Engineering > Train > Predict
 
