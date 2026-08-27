@@ -8,7 +8,7 @@ WITH positions AS (
         COALESCE(
             ROUND(SUM(buy_price * quantity) FILTER (WHERE is_active = TRUE)::numeric, 2),
             0
-        ) AS total_portfolio_value
+        ) AS total_cost_basis
     FROM {{ ref('stg_user_positions') }}
     GROUP BY symbol
 ),
@@ -43,7 +43,7 @@ SELECT
     p.total_positions,
     p.avg_buy_price,
     p.avg_quantity,
-    p.total_portfolio_value,
+    p.total_cost_basis,
 
     COALESCE(d.total_daily_alert_preferences, 0) AS total_daily_alert_preferences,
     COALESCE(d.enabled_daily_alerts, 0) AS enabled_daily_alerts,

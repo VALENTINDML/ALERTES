@@ -115,7 +115,7 @@ grain `user_id` avant jointure.
 
 `mart_crypto` : une ligne par cryptomonnaie détenue, matérialisé en table.
 `total_holders`, `total_positions`, `avg_buy_price`, `avg_quantity`,
-`total_portfolio_value`, ainsi que les compteurs d'alertes quotidiennes et
+`total_cost_basis`, ainsi que les compteurs d'alertes quotidiennes et
 d'alertes de prix, dont `triggered_price_alerts` qui s'appuie sur
 `triggered_at`. Seuls les symboles présents dans `user_positions`
 apparaissent.

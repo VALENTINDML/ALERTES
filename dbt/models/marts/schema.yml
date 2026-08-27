@@ -52,8 +52,8 @@ models:
 
   - name: mart_crypto
     description: >
-      Vue à une ligne par cryptomonnaie détenue : nombre de détenteurs,
-      positions, valeur agrégée des portefeuilles et compteurs d'alertes.
+      Une ligne par cryptomonnaie détenue : nombre de détenteurs, positions,
+      prix de revient cumulé et compteurs d'alertes.
       Seuls les symboles présents dans user_positions apparaissent.
     columns:
       - name: symbol
@@ -73,8 +73,12 @@ models:
         description: "Prix d'achat moyen des positions actives (nullable si aucune position active)."
       - name: avg_quantity
         description: "Quantité moyenne par position active (nullable si aucune position active)."
-      - name: total_portfolio_value
-        description: "Valeur cumulée des positions actives, 0 par défaut."
+      - name: total_cost_basis
+        description: >
+          Prix de revient cumulé des positions actives sur le symbole :
+          somme buy_price * quantity, 0 par défaut. Ce n'est pas une valeur
+          de marché — elle nécessiterait le dernier cours connu du symbole.
+          Calcul identique à cost_basis dans mart_users, au grain symbole.
         data_tests:
           - not_null
       - name: total_daily_alert_preferences
