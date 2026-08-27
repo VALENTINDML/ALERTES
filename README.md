@@ -127,7 +127,7 @@ destinataire, avec les drapeaux `is_sent`, `is_daily_prediction` et
 
 ### Tests
 
-Les 71 tests couvrent l'unicité et la présence des identifiants, les
+Les 72 tests couvrent l'unicité et la présence des identifiants, les
 domaines de valeurs adossés aux contraintes `CHECK` de la base, l'intégrité
 référentielle sur les clés étrangères déclarées dans le DDL, et l'unicité du
 couple `(user_id, symbol)` des préférences d'alertes quotidiennes.
@@ -137,18 +137,21 @@ S'y ajoute un test de réconciliation entre un mart et sa source : il compare
 `stg_user_positions`, et échoue si l'écart dépasse une tolérance dérivée des
 arrondis, `cost_basis` étant arrondi à deux décimales par utilisateur avant
 sommation. Le même test vérifie l'égalité exacte entre
-`SUM(total_positions)` et le nombre de positions actives. C'est le seul test
-de la suite dont la réussite ne découle ni d'une contrainte PostgreSQL, ni
-de la forme du SQL.
+`SUM(total_positions)` et le nombre de positions actives. Un second test de
+réconciliation compare `mart_users` et `mart_crypto` entre eux, qui agrègent
+la même grandeur à deux grains différents, `user_id` d'un côté et `symbol`
+de l'autre, avec une tolérance dérivée de leurs arrondis respectifs. Ce sont
+les deux seuls tests de la suite dont la réussite ne découle ni d'une
+contrainte PostgreSQL, ni de la forme du SQL.
 
 ```
 $ dbt build
 
 Running with dbt=1.12.0
-Found 12 models, 71 data tests, 9 sources, 477 macros
-Finished running 2 table models, 71 data tests, 10 view models in 1.33s
+Found 12 models, 72 data tests, 9 sources, 477 macros
+Finished running 2 table models, 72 data tests, 10 view models in 1.33s
 Completed successfully
-Done. PASS=83 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=83
+Done. PASS=84 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=84
 ```
 
 Ce test existe parce qu'il manquait. Un audit du depot a revele que
@@ -212,7 +215,7 @@ en base croissent mécaniquement, les DAGs `@daily` régénérant environ
   batchs de 5 000 commités en **~90 ms** (`FOR UPDATE SKIP LOCKED`)
 - API : **p95 de 2 à 39 ms** selon l'endpoint, mesuré avec 553 000
   notifications en base
-- dbt : 12 modèles, 71 tests, 9 sources, **83/83 PASS**
+- dbt : 12 modèles, 72 tests, 9 sources, **84/84 PASS**
 
 Aucun chargement massif des alertes en mémoire Python : les traitements
 volumineux sont délégués à PostgreSQL.
