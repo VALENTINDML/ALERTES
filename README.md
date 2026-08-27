@@ -151,7 +151,15 @@ Completed successfully
 Done. PASS=83 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=83
 ```
 
-<!-- TODO: recit correction fan-out -->
+Ce test existe parce qu'il manquait. Un audit du depot a revele que
+`mart_users` joignait trois tables 1-N simultanement avant d'agreger :
+les `COUNT()` et le `SUM()` portaient sur un produit cartesien, avec un
+facteur d'inflation de 2 a 12 selon les utilisateurs. Les 52 tests de la
+suite d'alors etaient tous verts — aucun ne pouvait le voir, le `GROUP BY`
+garantissant l'unicite de la cle quelle que soit la duplication en amont.
+La correction pre-agrege chaque table au grain `user_id` avant jointure,
+et a ete validee contre un calcul de reference independant sur les 200 000
+utilisateurs, en gardant `COUNT(DISTINCT)` comme temoin de non-regression.
 
 ## Observabilité et visualisation
 
@@ -263,9 +271,11 @@ cp .env.docker.exemple .env.docker
 
 Modifier ensuite les variables d'environnement selon votre configuration si nécessaire.
 
-### 2. Démarrer l’environnement Docker
+### 2. Démarrer l'environnement Docker
 
 Cette commande lance les services principaux du projet et initialise automatiquement les tables de la base PostgreSQL.
+
+L'option `--no-cache` n'est utile qu'au premier build ou après un changement de dépendances ; un `docker compose build` simple suffit ensuite.
 
 ```bash
 docker compose --env-file .env.docker build --no-cache
