@@ -190,25 +190,25 @@ models:
       - name: prediction_id
         description: >
           Prévision à l'origine de la notification. Null pour une alerte
-          de prix : la clé étrangère est nullable dans le DDL.
+          de prix : la clé étrangère est nullable dans le DDL. Le test
+          relationships de dbt écarte nativement les lignes nulles, aucun
+          filtre supplémentaire n'est nécessaire.
         data_tests:
           - relationships:
               arguments:
                 to: ref('stg_predictions')
                 field: prediction_id
-              config:
-                where: "prediction_id is not null"
       - name: price_alert_id
         description: >
           Alerte de prix à l'origine de la notification. Null pour une
           prévision quotidienne : la clé étrangère est nullable dans le DDL.
+          Le test relationships de dbt écarte nativement les lignes nulles,
+          aucun filtre supplémentaire n'est nécessaire.
         data_tests:
           - relationships:
               arguments:
                 to: ref('stg_price_alerts')
                 field: price_alert_id
-              config:
-                where: "price_alert_id is not null"
       - name: symbol
         description: "Paire crypto concernée par la notification."
       - name: notification_type
