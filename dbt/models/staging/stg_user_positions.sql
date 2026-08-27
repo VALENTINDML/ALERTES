@@ -7,4 +7,4 @@ SELECT
     buy_datetime,
     is_active,
     created_at
-FROM public.user_positions
+FROM {{ source('crypto_db', 'user_positions') }}

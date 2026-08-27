@@ -6,4 +6,4 @@ SELECT
     trend,
     model_path,
     created_at
-FROM public.predictions
+FROM {{ source('crypto_db', 'predictions') }}

@@ -27,7 +27,11 @@ price_alerts AS (
         symbol,
         COUNT(price_alert_id) AS total_price_alerts,
         COUNT(price_alert_id) FILTER (WHERE is_active = TRUE) AS active_price_alerts,
-        COUNT(price_alert_id) FILTER (WHERE is_active = FALSE) AS triggered_price_alerts
+        -- triggered_at est le signal explicite du declenchement.
+        -- is_active = FALSE donnerait le meme resultat aujourd'hui, mais
+        -- seulement parce qu'un unique ecrivain pose les deux champs
+        -- ensemble : rien dans le schema ne garantit cet invariant.
+        COUNT(price_alert_id) FILTER (WHERE triggered_at IS NOT NULL) AS triggered_price_alerts
     FROM {{ ref('stg_price_alerts') }}
     GROUP BY symbol
 )

@@ -9,4 +9,4 @@ SELECT
     status,
     sent_at,
     created_at
-FROM public.notifications
+FROM {{ source('crypto_db', 'notifications') }}

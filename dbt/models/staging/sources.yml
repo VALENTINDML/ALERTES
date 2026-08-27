@@ -1,0 +1,66 @@
+# Déclaration des tables brutes produites par la plateforme (collecte CCXT,
+# pipeline ML, API FastAPI, streaming). Elles vivent dans le schéma public
+# de la base crypto_db et ne sont écrites que par le code applicatif :
+# dbt les lit, il ne les modifie jamais.
+#
+# Passer par source() plutôt que par un FROM public.<table> en dur donne :
+# - un lignage complet depuis les tables brutes jusqu'aux marts ;
+# - la commande dbt source freshness ;
+# - un schéma configurable au lieu d'être figé dans chaque modèle.
+version: 2
+
+sources:
+  - name: crypto_db
+    description: >
+      Tables opérationnelles de la plateforme d'alertes crypto.
+      La logique d'alerte s'exécute en SQL dans PostgreSQL et dans
+      streaming/ ; ces tables en sont le résultat, pas la source.
+    database: crypto_db
+    schema: public
+
+    # Seuils volontairement larges : la collecte tourne à l'heure, mais la
+    # base de démonstration peut rester à l'arrêt plusieurs jours.
+    freshness:
+      warn_after: { count: 24, period: hour }
+      error_after: { count: 7, period: day }
+
+    tables:
+      - name: users
+        description: "Comptes utilisateurs et attributs géographiques."
+        loaded_at_field: created_at
+
+      - name: user_positions
+        description: >
+          Positions crypto détenues par les utilisateurs. buy_price est le
+          seuil de référence des alertes personnalisées : lecture seule.
+        loaded_at_field: created_at
+
+      - name: daily_alert_preferences
+        description: "Abonnements aux prévisions quotidiennes, un par utilisateur et par symbole."
+        loaded_at_field: created_at
+
+      - name: price_alerts
+        description: "Alertes de prix configurées par les utilisateurs."
+        loaded_at_field: created_at
+
+      - name: notifications
+        description: "Historique des notifications générées par le moteur d'alertes."
+        loaded_at_field: created_at
+
+      - name: predictions
+        description: "Prévisions à 24 h produites par le pipeline ML."
+        loaded_at_field: created_at
+
+      - name: model_metrics
+        description: "Métriques d'entraînement enregistrées à chaque modèle accepté."
+        loaded_at_field: created_at
+
+      - name: ccxt_ohlcv
+        description: "Bougies OHLCV collectées depuis Binance via CCXT."
+        # datetime est l'horodatage de la bougie, pas celui du chargement :
+        # la table ne porte pas de created_at.
+        loaded_at_field: datetime
+
+      - name: features_crypto
+        description: "Indicateurs techniques dérivés des bougies, entrée des modèles ML."
+        loaded_at_field: datetime

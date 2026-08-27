@@ -4,4 +4,4 @@ SELECT
     symbol,
     enabled,
     created_at
-FROM public.daily_alert_preferences
+FROM {{ source('crypto_db', 'daily_alert_preferences') }}

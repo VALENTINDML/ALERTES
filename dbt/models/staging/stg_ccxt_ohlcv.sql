@@ -9,4 +9,4 @@ SELECT
     low,
     close,
     volume
-FROM public.ccxt_ohlcv
+FROM {{ source('crypto_db', 'ccxt_ohlcv') }}

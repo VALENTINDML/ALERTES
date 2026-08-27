@@ -1,108 +1,368 @@
 # Documentation et tests de qualité des modèles staging.
 #
-# Les tests dbt vérifient automatiquement :
-# - l'unicité des identifiants ;
-# - l'absence de valeurs nulles ;
-# - la validité de certaines valeurs métier.
+# Les modèles de staging exposent les tables brutes déclarées dans
+# sources.yml : renommage de l'identifiant technique en clé explicite,
+# aucune transformation métier. La logique d'alerte reste en SQL dans
+# PostgreSQL et dans streaming/.
+#
+# Les tests couvrent :
+# - l'unicité et la présence des identifiants ;
+# - les domaines de valeurs adossés aux contraintes CHECK de la base ;
+# - l'intégrité référentielle, là où le DDL déclare une clé étrangère.
 version: 2
 
 models:
+  # ------------------------------------------------------------------
+  # Utilisateurs et patrimoine
+  # ------------------------------------------------------------------
   - name: stg_users
-    description: "Cleaned user data."
+    description: "Comptes utilisateurs : identité, statut et attributs de localisation."
     columns:
       - name: user_id
-        tests:
+        description: "Identifiant unique de l'utilisateur (users.id)."
+        data_tests:
           - unique
           - not_null
       - name: email
-        tests:
+        description: "Adresse e-mail, unique en base et servant d'identifiant de connexion."
+        data_tests:
           - unique
           - not_null
+      - name: first_name
+        description: "Prénom de l'utilisateur."
+      - name: last_name
+        description: "Nom de famille de l'utilisateur."
       - name: is_active
-        tests:
+        description: "Vrai si le compte est actif. Un compte inactif ne reçoit plus de notification."
+        data_tests:
           - not_null
+      - name: country_code
+        description: "Code pays ISO 3166-1 alpha-2, sur deux caractères."
+      - name: country
+        description: "Nom du pays de résidence."
+      - name: region
+        description: "Région ou subdivision administrative."
+      - name: city
+        description: "Ville de résidence."
+      - name: postal_code
+        description: "Code postal."
+      - name: currency
+        description: "Devise d'affichage préférée de l'utilisateur."
+      - name: language
+        description: "Langue d'affichage préférée."
+      - name: timezone
+        description: "Fuseau horaire, utilisé pour programmer l'envoi des prévisions quotidiennes."
+      - name: created_at
+        description: "Date de création du compte."
+
+  - name: stg_user_positions
+    description: >
+      Positions crypto détenues par les utilisateurs. Une ligne par achat :
+      un même utilisateur peut détenir plusieurs positions sur un symbole.
+      Alimente mart_users et mart_crypto.
+    columns:
+      - name: position_id
+        description: "Identifiant unique de la position (user_positions.id)."
+        data_tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: "Utilisateur détenteur de la position."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_users')
+                field: user_id
+      - name: symbol
+        description: "Paire crypto détenue, par exemple BTC/USDT."
+        data_tests:
+          - not_null
+      - name: buy_price
+        description: >
+          Prix d'achat unitaire. Sert de référence au déclenchement des
+          alertes personnalisées : la valeur est lue telle quelle, jamais
+          transformée dans dbt.
+        data_tests:
+          - not_null
+      - name: quantity
+        description: "Quantité achetée."
+      - name: buy_datetime
+        description: "Date et heure de l'achat."
+      - name: is_active
+        description: "Vrai tant que la position est détenue. Les agrégats des marts ne comptent que les positions actives."
+        data_tests:
+          - not_null
+      - name: created_at
+        description: "Date d'enregistrement de la position."
+
+  # ------------------------------------------------------------------
+  # Alertes et notifications
+  # ------------------------------------------------------------------
+  - name: stg_daily_alert_preferences
+    description: >
+      Abonnements aux prévisions quotidiennes. Une ligne par utilisateur
+      et par symbole : la base impose l'unicité du couple.
+      Alimente mart_users et mart_crypto.
+    columns:
+      - name: daily_alert_preference_id
+        description: "Identifiant unique de la préférence (daily_alert_preferences.id)."
+        data_tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: "Utilisateur abonné."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_users')
+                field: user_id
+      - name: symbol
+        description: "Paire crypto concernée par l'abonnement."
+        data_tests:
+          - not_null
+      - name: enabled
+        description: "Vrai si l'utilisateur reçoit effectivement la prévision quotidienne pour ce symbole."
+        data_tests:
+          - not_null
+      - name: created_at
+        description: "Date de création de la préférence."
 
   - name: stg_price_alerts
-    description: "User price alert configuration."
+    description: >
+      Alertes de prix configurées par les utilisateurs. Le moteur de
+      streaming les désactive et horodate triggered_at au déclenchement.
     columns:
       - name: price_alert_id
-        tests:
+        description: "Identifiant unique de l'alerte (price_alerts.id)."
+        data_tests:
           - unique
           - not_null
       - name: user_id
-        tests:
+        description: "Utilisateur ayant configuré l'alerte."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_users')
+                field: user_id
+      - name: symbol
+        description: "Paire crypto surveillée."
+      - name: target_price
+        description: "Prix cible déclenchant l'alerte."
+        data_tests:
           - not_null
       - name: direction
-        tests:
+        description: "Sens du franchissement surveillé : above (au-dessus) ou below (en dessous)."
+        data_tests:
           - accepted_values:
-              values: ["above", "below"]
-      - name: target_price
-        tests:
-          - not_null
+              arguments:
+                values: ["above", "below"]
+      - name: is_active
+        description: "Vrai tant que l'alerte n'a pas été déclenchée."
+      - name: triggered_at
+        description: >
+          Horodatage du déclenchement, null tant que l'alerte est en veille.
+          C'est le signal explicite du déclenchement, préféré à is_active
+          dans les marts.
+      - name: created_at
+        description: "Date de création de l'alerte."
 
   - name: stg_notifications
-    description: "Generated notifications."
+    description: >
+      Historique des notifications générées par le moteur d'alertes :
+      prévisions quotidiennes et alertes de prix.
     columns:
       - name: notification_id
-        tests:
+        description: "Identifiant unique de la notification (notifications.id)."
+        data_tests:
           - unique
           - not_null
       - name: user_id
-        tests:
+        description: "Utilisateur destinataire."
+        data_tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_users')
+                field: user_id
+      - name: prediction_id
+        description: >
+          Prévision à l'origine de la notification. Null pour une alerte
+          de prix : la clé étrangère est nullable dans le DDL. Le test
+          relationships de dbt écarte nativement les lignes nulles, aucun
+          filtre supplémentaire n'est nécessaire.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_predictions')
+                field: prediction_id
+      - name: price_alert_id
+        description: >
+          Alerte de prix à l'origine de la notification. Null pour une
+          prévision quotidienne : la clé étrangère est nullable dans le DDL.
+          Le test relationships de dbt écarte nativement les lignes nulles,
+          aucun filtre supplémentaire n'est nécessaire.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_price_alerts')
+                field: price_alert_id
+      - name: symbol
+        description: "Paire crypto concernée par la notification."
       - name: notification_type
-        tests:
+        description: "Type de notification : daily_prediction ou price_target."
+        data_tests:
           - accepted_values:
-              values: ["daily_prediction", "price_target"]
+              arguments:
+                values: ["daily_prediction", "price_target"]
+      - name: message
+        description: "Corps du message envoyé à l'utilisateur."
       - name: status
-        tests:
+        description: >
+          Statut d'envoi. Les quatre valeurs correspondent à la contrainte
+          CHECK de la table notifications.
+        data_tests:
           - accepted_values:
-              values: ["pending", "sent", "failed"]
+              arguments:
+                values: ["pending", "sent", "failed", "cancelled"]
+      - name: sent_at
+        description: "Date d'envoi effective, null tant que la notification n'est pas partie."
+      - name: created_at
+        description: "Date de création de la notification."
 
+  # ------------------------------------------------------------------
+  # Machine Learning
+  # ------------------------------------------------------------------
   - name: stg_predictions
-    description: "ML predictions generated by the prediction pipeline."
+    description: "Prévisions de variation à 24 h produites par le pipeline ML, une par symbole et par horodatage."
     columns:
       - name: prediction_id
-        tests:
+        description: "Identifiant unique de la prévision (predictions.id)."
+        data_tests:
           - unique
           - not_null
       - name: symbol
-        tests:
+        description: "Paire crypto prédite."
+        data_tests:
           - not_null
+      - name: prediction_datetime
+        description: "Horodatage auquel la prévision se rapporte. Unique par symbole en base."
+      - name: predicted_change_24h
+        description: "Variation attendue à 24 h, en pourcentage."
       - name: trend
-        tests:
+        description: "Tendance déduite de la variation prédite : hausse, baisse ou stagnation."
+        data_tests:
           - accepted_values:
-              values: ["hausse", "baisse", "stagnation"]
+              arguments:
+                values: ["hausse", "baisse", "stagnation"]
+      - name: model_path
+        description: "Chemin du modèle sérialisé ayant produit la prévision."
+      - name: created_at
+        description: "Date d'enregistrement de la prévision."
 
   - name: stg_model_metrics
-    description: "Stored ML model metrics."
+    description: "Métriques d'entraînement enregistrées à chaque modèle accepté. Mesure la qualité en apprentissage, pas en production."
     columns:
       - name: metric_id
-        tests:
+        description: "Identifiant unique de la mesure (model_metrics.id)."
+        data_tests:
           - unique
           - not_null
       - name: symbol
-        tests:
+        description: "Paire crypto sur laquelle le modèle a été entraîné."
+        data_tests:
           - not_null
+      - name: mae
+        description: "Erreur absolue moyenne."
+      - name: rmse
+        description: "Racine de l'erreur quadratique moyenne."
+      - name: mape
+        description: "Erreur absolue moyenne en pourcentage."
+      - name: r2
+        description: "Coefficient de détermination R²."
+      - name: created_at
+        description: "Date de l'entraînement."
 
+  # ------------------------------------------------------------------
+  # Données de marché
+  # ------------------------------------------------------------------
   - name: stg_ccxt_ohlcv
-    description: "Historical OHLCV data collected from Binance."
+    description: "Bougies OHLCV collectées depuis Binance via CCXT. Source brute du pipeline ML."
     columns:
       - name: ohlcv_id
-        tests:
+        description: "Identifiant unique de la bougie (ccxt_ohlcv.id)."
+        data_tests:
           - unique
           - not_null
       - name: symbol
-        tests:
+        description: "Paire crypto cotée."
+        data_tests:
           - not_null
+      - name: timestamp
+        description: "Horodatage d'ouverture de la bougie, en millisecondes depuis l'epoch."
+      - name: datetime
+        description: "Horodatage d'ouverture de la bougie, en date et heure."
+      - name: timeframe
+        description: "Granularité de la bougie, par exemple 1h."
+      - name: open
+        description: "Cours d'ouverture."
+      - name: high
+        description: "Cours le plus haut de la période."
+      - name: low
+        description: "Cours le plus bas de la période."
+      - name: close
+        description: "Cours de clôture."
+      - name: volume
+        description: "Volume échangé sur la période."
 
   - name: stg_features_crypto
-    description: "Feature engineering output used by ML models."
+    description: >
+      Indicateurs techniques dérivés des bougies OHLCV. Table d'entrée des
+      modèles ML : elle porte à la fois les variables explicatives et la
+      cible observée à 24 h.
     columns:
       - name: feature_id
-        tests:
+        description: "Identifiant unique de la ligne de features (features_crypto.id)."
+        data_tests:
           - unique
           - not_null
       - name: symbol
-        tests:
+        description: "Paire crypto concernée."
+        data_tests:
           - not_null
+      - name: timestamp
+        description: "Horodatage de la bougie, en millisecondes depuis l'epoch."
+      - name: datetime
+        description: "Horodatage de la bougie, en date et heure."
+      - name: timeframe
+        description: "Granularité de la bougie, par exemple 1h."
+      - name: open
+        description: "Cours d'ouverture."
+      - name: high
+        description: "Cours le plus haut de la période."
+      - name: low
+        description: "Cours le plus bas de la période."
+      - name: close
+        description: "Cours de clôture."
+      - name: volume
+        description: "Volume échangé sur la période."
+      - name: return_1h
+        description: "Rendement sur 1 heure."
+      - name: return_6h
+        description: "Rendement sur 6 heures."
+      - name: return_24h
+        description: "Rendement sur 24 heures."
+      - name: ema_20
+        description: "Moyenne mobile exponentielle sur 20 périodes."
+      - name: ema_50
+        description: "Moyenne mobile exponentielle sur 50 périodes."
+      - name: rsi_14
+        description: "Indice de force relative sur 14 périodes."
+      - name: volatility_24h
+        description: "Volatilité observée sur 24 heures."
+      - name: volume_ratio
+        description: "Volume rapporté à sa moyenne récente."
+      - name: target_24h_percent
+        description: "Variation réellement observée à 24 h, en pourcentage. Cible d'apprentissage des modèles."

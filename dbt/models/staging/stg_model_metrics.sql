@@ -6,4 +6,4 @@ SELECT
     mape,
     r2,
     created_at
-FROM public.model_metrics
+FROM {{ source('crypto_db', 'model_metrics') }}
